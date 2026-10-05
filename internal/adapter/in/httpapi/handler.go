@@ -17,7 +17,7 @@ type healthResponse struct {
 // default-deny middleware added in step 4.
 func NewRouter() http.Handler {
 	// placeholder route so the 401 test has something to hit; real
-	// sale routes arrive with the first sales story (HU-VEN-NN)
+	// sale routes arrive with the first sales story (HU-VEN-01)
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /api/v1/sales/{id}", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotImplemented)
