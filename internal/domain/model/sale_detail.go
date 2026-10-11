@@ -17,6 +17,12 @@ func (d SaleDetail) UnitPriceCents() int64 { return d.unitPriceCents }
 func (d SaleDetail) SubtotalCents() int64  { return d.subtotalCents }
 
 func newSaleDetail(in LineInput) (SaleDetail, error) {
+	if in.Quantity <= 0 {
+		return SaleDetail{}, ErrInvalidQuantity
+	}
+	if in.UnitPriceCents <= 0 {
+		return SaleDetail{}, ErrInvalidUnitPrice
+	}
 	return SaleDetail{
 		id:             in.DetailID,
 		productID:      in.ProductID,

@@ -10,6 +10,9 @@ const maxSaleLines = 100
 var (
 	ErrNoLines      = errors.New("a sale needs at least one line")
 	ErrTooManyLines = errors.New("a sale has at most 100 lines")
+
+	ErrInvalidQuantity  = errors.New("quantity must be greater than 0")
+	ErrInvalidUnitPrice = errors.New("unit price must be greater than 0")
 )
 
 // LineInput is what the caller supplies for one line. Subtotals and the
