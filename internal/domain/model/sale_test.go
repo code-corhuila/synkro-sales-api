@@ -49,6 +49,9 @@ func TestRegisterSale_Succeeds(t *testing.T) {
 				if want := int64(d.Quantity()) * d.UnitPriceCents(); d.SubtotalCents() != want {
 					t.Errorf("subtotal = %d, want quantity*unitPrice = %d", d.SubtotalCents(), want)
 				}
+				if d.ID() == "" || d.ProductID() == "" {
+					t.Error("line identifiers not stored")
+				}
 				sum += d.SubtotalCents()
 			}
 			if sale.TotalCents() != sum {
