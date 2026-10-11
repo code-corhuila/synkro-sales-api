@@ -1,5 +1,7 @@
 package model
 
+import "math"
+
 // SaleDetail is a line of a Sale. It has no identity outside its Sale and is
 // only built through the Sale's methods, so its subtotal is always computed.
 type SaleDetail struct {
@@ -19,6 +21,9 @@ func (d SaleDetail) SubtotalCents() int64  { return d.subtotalCents }
 func newSaleDetail(in LineInput) (SaleDetail, error) {
 	if in.Quantity <= 0 {
 		return SaleDetail{}, ErrInvalidQuantity
+	}
+	if in.Quantity > math.MaxInt32 {
+		return SaleDetail{}, ErrQuantityTooLarge
 	}
 	if in.UnitPriceCents <= 0 {
 		return SaleDetail{}, ErrInvalidUnitPrice
