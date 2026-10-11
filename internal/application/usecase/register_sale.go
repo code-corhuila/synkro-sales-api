@@ -30,12 +30,12 @@ func (u *RegisterSale) Register(ctx context.Context, cmd in.RegisterSaleCommand)
 	}
 
 	saleID := u.ids.NewID()
-	var lines []model.LineInput
-	for _, line := range cmd.Lines {
-		lines = append(lines, model.LineInput{
+	lines := make([]model.LineInput, len(cmd.Lines))
+	for i, line := range cmd.Lines {
+		lines[i] = model.LineInput{
 			DetailID: u.ids.NewID(), ProductID: line.ProductID,
 			Quantity: line.Quantity, UnitPriceCents: line.UnitPriceCents,
-		})
+		}
 	}
 	sale, err := model.RegisterSale(saleID, cmd.CustomerID, cmd.CreatedBy, u.clock.Now().UTC(), lines)
 	if err != nil {
