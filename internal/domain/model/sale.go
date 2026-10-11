@@ -13,6 +13,7 @@ var (
 
 	ErrInvalidQuantity  = errors.New("quantity must be greater than 0")
 	ErrInvalidUnitPrice = errors.New("unit price must be greater than 0")
+	ErrQuantityTooLarge = errors.New("quantity exceeds the int32 range of the stored document")
 )
 
 // LineInput is what the caller supplies for one line. Subtotals and the
