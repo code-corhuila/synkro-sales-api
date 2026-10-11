@@ -104,6 +104,14 @@ func validDocument(t *testing.T) bson.M {
 	if err := bson.Unmarshal(raw, &doc); err != nil {
 		t.Fatal(err)
 	}
+	// Driver v2 decodes documents inside interface-valued arrays as bson.D.
+	for i, value := range doc["details"].(bson.A) {
+		mapped := bson.M{}
+		for _, field := range value.(bson.D) {
+			mapped[field.Key] = field.Value
+		}
+		doc["details"].(bson.A)[i] = mapped
+	}
 	return doc
 }
 
