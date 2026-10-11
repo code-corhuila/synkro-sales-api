@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [develop, qa, main, feat/sale-registration-usecase]
+    branches: [develop, qa, main]
   pull_request:
     branches: [develop, qa, main]
 
@@ -72,3 +72,29 @@ jobs:
             exit 1
           fi
           echo "Architecture check passed: domain has no external imports."
+
+  mongodb-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: sales-api
+      - name: Check out compatible approved Sales migrations
+        uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-sales-db
+          ref: ffdc24b9ce7c84b745b30bb1e85b76b07d029475
+          path: sales-db
+          persist-credentials: false
+      - name: Migrate isolated MongoDB 7.0 and run required integration scenarios
+        working-directory: sales-api
+        run: bash deploy/ci/mongo-integration.sh ../sales-db
+      - name: Upload executed integration evidence and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mongodb-integration-evidence
+          path: sales-api/.integration-results/
+          include-hidden-files: true
+          if-no-files-found: error
