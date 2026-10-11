@@ -23,11 +23,15 @@ func newSaleDetail(in LineInput) (SaleDetail, error) {
 	if in.UnitPriceCents <= 0 {
 		return SaleDetail{}, ErrInvalidUnitPrice
 	}
+	subtotal, err := mulExact(int64(in.Quantity), in.UnitPriceCents)
+	if err != nil {
+		return SaleDetail{}, err
+	}
 	return SaleDetail{
 		id:             in.DetailID,
 		productID:      in.ProductID,
 		quantity:       in.Quantity,
 		unitPriceCents: in.UnitPriceCents,
-		subtotalCents:  int64(in.Quantity) * in.UnitPriceCents,
+		subtotalCents:  subtotal,
 	}, nil
 }
