@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [develop, qa, main]
+    branches: [develop, qa, main, feat/sale-registration-usecase]
   pull_request:
     branches: [develop, qa, main]
 
@@ -34,6 +34,34 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: Race detector
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          set -euo pipefail
+          command -v gcc
+          gcc --version
+          go test -race ./...
+      - name: Global coverage gate (minimum 80%)
+        env:
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          go test -coverprofile=coverage.out ./...
+          report=$(go tool cover -func=coverage.out)
+          echo "$report"
+          coverage=$(awk '/^total:/ {value = $NF; sub(/%$/, "", value); print value}' <<< "$report")
+          awk -v coverage="$coverage" 'BEGIN {
+            if (coverage !~ /^[0-9]+([.][0-9]+)?$/) {
+              print "Could not read global coverage"
+              exit 1
+            }
+            printf "Global coverage: %s%% (minimum: 80%%)\n", coverage
+            if (coverage + 0 < 80) {
+              print "Global coverage is below the required minimum"
+              exit 1
+            }
+          }'
       - name: Architecture check — domain imports nothing but the standard library
         run: |
           set -e
