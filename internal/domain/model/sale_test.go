@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -68,7 +69,7 @@ func TestRegisterSale_LineCountBoundaries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := RegisterSale("sale-1", "customer-1", "user-1", saleDate, lines(tt.count))
-			if !errorsIs(err, tt.want) {
+			if !errors.Is(err, tt.want) {
 				t.Errorf("got %v, want %v", err, tt.want)
 			}
 		})
