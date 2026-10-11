@@ -75,3 +75,28 @@ func TestRegisterSale_LineCountBoundaries(t *testing.T) {
 		})
 	}
 }
+
+func TestRegisterSale_RejectsInvalidLineFields(t *testing.T) {
+	tests := []struct {
+		name string
+		line LineInput
+		want error
+	}{
+		{"zero quantity", lineInput(0, 0, 1000), ErrInvalidQuantity},
+		{"negative quantity", lineInput(0, -1, 1000), ErrInvalidQuantity},
+		{"zero unit price", lineInput(0, 1, 0), ErrInvalidUnitPrice},
+		{"negative unit price", lineInput(0, 1, -5), ErrInvalidUnitPrice},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := append(lines(2), tt.line)
+			sale, err := RegisterSale("sale-1", "customer-1", "user-1", saleDate, in)
+			if !errors.Is(err, tt.want) {
+				t.Errorf("got %v, want %v", err, tt.want)
+			}
+			if sale != nil {
+				t.Error("no sale must be returned on error")
+			}
+		})
+	}
+}
