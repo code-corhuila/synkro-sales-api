@@ -267,3 +267,26 @@ func TestSale_AddDetail_OverflowLeavesSaleUnchanged(t *testing.T) {
 		t.Errorf("adding exactly up to MaxInt64 must work: err=%v total=%d", err, sale.TotalCents())
 	}
 }
+
+func TestSaleDetail_QuantityInt32Range(t *testing.T) {
+	tests := []struct {
+		name     string
+		quantity int
+		wantErr  error
+	}{
+		{"MaxInt32 is accepted", math.MaxInt32, nil},
+		{"MaxInt32+1 is rejected", math.MaxInt32 + 1, ErrQuantityTooLarge},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := RegisterSale("s", "c", "u", saleDate, []LineInput{lineInput(0, tt.quantity, 1)})
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("RegisterSale: got %v, want %v", err, tt.wantErr)
+			}
+			sale := newTestSale(t, 1)
+			if err := sale.AddDetail("d", "p", tt.quantity, 1); !errors.Is(err, tt.wantErr) {
+				t.Errorf("AddDetail: got %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
