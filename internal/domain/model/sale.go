@@ -64,7 +64,9 @@ func RegisterSale(id, customerID, createdBy string, date time.Time, lines []Line
 		details = append(details, d)
 	}
 	s := &Sale{id: id, customerID: customerID, createdBy: createdBy, date: date, active: true, details: details}
-	s.totalCents, _ = sumSubtotals(details)
+	if _, err := s.CalculateTotal(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -73,5 +75,34 @@ func sumSubtotals(details []SaleDetail) (int64, error) {
 	for _, d := range details {
 		total += d.subtotalCents
 	}
+	return total, nil
+}
+
+// AddDetail appends a line and recalculates the total. On error the sale is
+// left unchanged.
+func (s *Sale) AddDetail(detailID, productID string, quantity int, unitPriceCents int64) error {
+	if len(s.details) >= maxSaleLines {
+		return ErrTooManyLines
+	}
+	d, err := newSaleDetail(LineInput{DetailID: detailID, ProductID: productID, Quantity: quantity, UnitPriceCents: unitPriceCents})
+	if err != nil {
+		return err
+	}
+	s.details = append(s.details, d)
+	if _, err := s.CalculateTotal(); err != nil {
+		s.details = s.details[:len(s.details)-1]
+		return err
+	}
+	return nil
+}
+
+// CalculateTotal recomputes the total from the current lines, stores it and
+// returns it. Calling it again without changing the lines gives the same value.
+func (s *Sale) CalculateTotal() (int64, error) {
+	total, err := sumSubtotals(s.details)
+	if err != nil {
+		return 0, err
+	}
+	s.totalCents = total
 	return total, nil
 }
