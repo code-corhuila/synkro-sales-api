@@ -212,9 +212,9 @@ func TestRegisterSale_SubtotalOverflow(t *testing.T) {
 		{"max price, quantity 1 fits", 1, math.MaxInt64, nil, math.MaxInt64},
 		{"largest even product fits", 2, math.MaxInt64 / 2, nil, math.MaxInt64 - 1},
 		{"one cent over: 2 x (MaxInt64/2+1)", 2, math.MaxInt64/2 + 1, ErrAmountOverflow, 0},
-		{"price 3, quantity MaxInt64/3 fits", int(math.MaxInt64 / 3), 3, nil, (math.MaxInt64 / 3) * 3},
-		{"price 3, quantity MaxInt64/3+1 overflows", int(math.MaxInt64/3) + 1, 3, ErrAmountOverflow, 0},
-		{"both factors near MaxInt64", math.MaxInt, math.MaxInt64, ErrAmountOverflow, 0},
+		{"MaxInt32 x (MaxInt64/MaxInt32) fits", math.MaxInt32, math.MaxInt64 / math.MaxInt32, nil, math.MaxInt32 * (math.MaxInt64 / math.MaxInt32)},
+		{"MaxInt32 x (MaxInt64/MaxInt32 + 1) overflows", math.MaxInt32, math.MaxInt64/math.MaxInt32 + 1, ErrAmountOverflow, 0},
+		{"MaxInt32 x MaxInt64 overflows", math.MaxInt32, math.MaxInt64, ErrAmountOverflow, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -288,5 +288,17 @@ func TestSaleDetail_QuantityInt32Range(t *testing.T) {
 				t.Errorf("AddDetail: got %v, want %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestMulExact_FullInt64Operands(t *testing.T) {
+	if got, err := mulExact(math.MaxInt64/3, 3); err != nil || got != (math.MaxInt64/3)*3 {
+		t.Errorf("MaxInt64/3 x 3: got %d, %v", got, err)
+	}
+	if _, err := mulExact(math.MaxInt64/3+1, 3); !errors.Is(err, ErrAmountOverflow) {
+		t.Errorf("MaxInt64/3+1 x 3: got %v, want ErrAmountOverflow", err)
+	}
+	if _, err := mulExact(math.MaxInt64, math.MaxInt64); !errors.Is(err, ErrAmountOverflow) {
+		t.Errorf("MaxInt64 x MaxInt64: got %v, want ErrAmountOverflow", err)
 	}
 }
