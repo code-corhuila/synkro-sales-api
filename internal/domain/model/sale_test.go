@@ -100,3 +100,99 @@ func TestRegisterSale_RejectsInvalidLineFields(t *testing.T) {
 		})
 	}
 }
+
+func newTestSale(t *testing.T, count int) *Sale {
+	t.Helper()
+	sale, err := RegisterSale("sale-1", "customer-1", "user-1", saleDate, lines(count))
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	return sale
+}
+
+func TestSale_AddDetail_RecalculatesTotal(t *testing.T) {
+	sale := newTestSale(t, 2)
+	before := sale.TotalCents()
+
+	if err := sale.AddDetail("detail-new", "product-new", 3, 2500); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got, want := sale.TotalCents(), before+3*2500; got != want {
+		t.Errorf("total = %d, want %d", got, want)
+	}
+	details := sale.Details()
+	if len(details) != 3 || details[2].SubtotalCents() != 7500 {
+		t.Errorf("new line not appended correctly: %+v", details)
+	}
+}
+
+func TestSale_AddDetail_RejectsInvalidLinesWithoutChangingTheSale(t *testing.T) {
+	tests := []struct {
+		name     string
+		quantity int
+		price    int64
+		want     error
+	}{
+		{"zero quantity", 0, 100, ErrInvalidQuantity},
+		{"zero unit price", 1, 0, ErrInvalidUnitPrice},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sale := newTestSale(t, 2)
+			before := sale.TotalCents()
+			if err := sale.AddDetail("d", "p", tt.quantity, tt.price); !errors.Is(err, tt.want) {
+				t.Errorf("got %v, want %v", err, tt.want)
+			}
+			if sale.TotalCents() != before || len(sale.Details()) != 2 {
+				t.Error("a failed AddDetail must leave the sale unchanged")
+			}
+		})
+	}
+}
+
+func TestSale_AddDetail_RespectsTheLineLimit(t *testing.T) {
+	sale := newTestSale(t, 100)
+	before := sale.TotalCents()
+	if err := sale.AddDetail("d", "p", 1, 100); !errors.Is(err, ErrTooManyLines) {
+		t.Errorf("got %v, want ErrTooManyLines", err)
+	}
+	if sale.TotalCents() != before || len(sale.Details()) != 100 {
+		t.Error("a failed AddDetail must leave the sale unchanged")
+	}
+}
+
+func TestSale_CalculateTotal_IsIdempotent(t *testing.T) {
+	sale := newTestSale(t, 5)
+	first, err := sale.CalculateTotal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := sale.CalculateTotal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second || second != sale.TotalCents() {
+		t.Errorf("totals differ: %d, %d, stored %d", first, second, sale.TotalCents())
+	}
+}
+
+func TestSale_UnitPriceIsFrozen(t *testing.T) {
+	sale := newTestSale(t, 3)
+	frozen := make([]int64, 0, 3)
+	for _, d := range sale.Details() {
+		frozen = append(frozen, d.UnitPriceCents())
+	}
+
+	_ = sale.AddDetail("d", "p", 2, 999)
+	_, _ = sale.CalculateTotal()
+	// Mutating the returned copy must not reach the aggregate.
+	copied := sale.Details()
+	copied[0].unitPriceCents = 1
+
+	for i, d := range sale.Details()[:3] {
+		if d.UnitPriceCents() != frozen[i] {
+			t.Errorf("line %d unit price changed from %d to %d", i, frozen[i], d.UnitPriceCents())
+		}
+	}
+}
