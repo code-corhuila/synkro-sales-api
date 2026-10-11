@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 )
@@ -194,5 +195,72 @@ func TestSale_UnitPriceIsFrozen(t *testing.T) {
 		if d.UnitPriceCents() != frozen[i] {
 			t.Errorf("line %d unit price changed from %d to %d", i, frozen[i], d.UnitPriceCents())
 		}
+	}
+}
+
+func TestRegisterSale_SubtotalOverflow(t *testing.T) {
+	tests := []struct {
+		name     string
+		quantity int
+		price    int64
+		wantErr  error
+		subtotal int64
+	}{
+		{"max price, quantity 1 fits", 1, math.MaxInt64, nil, math.MaxInt64},
+		{"largest even product fits", 2, math.MaxInt64 / 2, nil, math.MaxInt64 - 1},
+		{"one cent over: 2 x (MaxInt64/2+1)", 2, math.MaxInt64/2 + 1, ErrAmountOverflow, 0},
+		{"price 3, quantity MaxInt64/3 fits", int(math.MaxInt64 / 3), 3, nil, (math.MaxInt64 / 3) * 3},
+		{"price 3, quantity MaxInt64/3+1 overflows", int(math.MaxInt64/3) + 1, 3, ErrAmountOverflow, 0},
+		{"both factors near MaxInt64", math.MaxInt, math.MaxInt64, ErrAmountOverflow, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sale, err := RegisterSale("s", "c", "u", saleDate, []LineInput{lineInput(0, tt.quantity, tt.price)})
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr == nil && sale.Details()[0].SubtotalCents() != tt.subtotal {
+				t.Errorf("subtotal = %d, want %d", sale.Details()[0].SubtotalCents(), tt.subtotal)
+			}
+		})
+	}
+}
+
+func TestRegisterSale_TotalOverflow(t *testing.T) {
+	tests := []struct {
+		name    string
+		second  int64
+		wantErr error
+	}{
+		{"MaxInt64-1 + 1 equals MaxInt64 and fits", 1, nil},
+		{"MaxInt64-1 + 2 overflows", 2, ErrAmountOverflow},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := []LineInput{lineInput(0, 1, math.MaxInt64-1), lineInput(1, 1, tt.second)}
+			sale, err := RegisterSale("s", "c", "u", saleDate, in)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr == nil && sale.TotalCents() != math.MaxInt64 {
+				t.Errorf("total = %d, want MaxInt64", sale.TotalCents())
+			}
+		})
+	}
+}
+
+func TestSale_AddDetail_OverflowLeavesSaleUnchanged(t *testing.T) {
+	sale, err := RegisterSale("s", "c", "u", saleDate, []LineInput{lineInput(0, 1, math.MaxInt64-1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sale.AddDetail("d", "p", 1, 2); !errors.Is(err, ErrAmountOverflow) {
+		t.Fatalf("got %v, want ErrAmountOverflow", err)
+	}
+	if sale.TotalCents() != math.MaxInt64-1 || len(sale.Details()) != 1 {
+		t.Errorf("sale changed after rejected line: total=%d lines=%d", sale.TotalCents(), len(sale.Details()))
+	}
+	if err := sale.AddDetail("d", "p", 1, 1); err != nil || sale.TotalCents() != math.MaxInt64 {
+		t.Errorf("adding exactly up to MaxInt64 must work: err=%v total=%d", err, sale.TotalCents())
 	}
 }
