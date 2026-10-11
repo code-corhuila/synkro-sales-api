@@ -72,8 +72,11 @@ func RegisterSale(id, customerID, createdBy string, date time.Time, lines []Line
 
 func sumSubtotals(details []SaleDetail) (int64, error) {
 	var total int64
+	var err error
 	for _, d := range details {
-		total += d.subtotalCents
+		if total, err = addExact(total, d.subtotalCents); err != nil {
+			return 0, err
+		}
 	}
 	return total, nil
 }
