@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -201,5 +203,39 @@ func TestSaleMappingRejectsInvalidInput(t *testing.T) {
 	}
 	if _, err := encodeSale("fixture-key", bad); err == nil {
 		t.Fatal("noncanonical UUID accepted")
+	}
+}
+
+func TestMongoRepositoryRejectsBeforeInsertion(t *testing.T) {
+	// Neither rejected input nor a cancelled request may reach the collection.
+	repo := NewMongoRepository(nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got, created, err := repo.CreateOnce(ctx, "fixture-key", saleFixture(t, 1))
+	if !errors.Is(err, context.Canceled) || got != nil || created {
+		t.Fatalf("cancelled request reported success: %v", err)
+	}
+	got, created, err = repo.CreateOnce(context.Background(), "fixture-key", nil)
+	if !errors.Is(err, ErrInvalidSaleDocument) || got != nil || created {
+		t.Fatalf("invalid input reached insertion: %v", err)
+	}
+}
+
+func TestSaleMappingDatetimeAndAmountBoundaries(t *testing.T) {
+	for _, date := range []time.Time{time.Unix(0, -1), time.Time{}, time.Unix(1, 999999999)} {
+		s, err := model.RegisterSale(uuid.NewString(), uuid.NewString(), uuid.NewString(), date, []model.LineInput{{DetailID: uuid.NewString(), ProductID: uuid.NewString(), Quantity: 1, UnitPriceCents: math.MaxInt64}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := encodeSale(strings.Repeat("é", 128), s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSaleBSON(t, raw, s, strings.Repeat("é", 128))
+		got, err := decodeSale(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSale(t, got, s)
 	}
 }
