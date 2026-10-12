@@ -42,3 +42,23 @@ func saleResponse(s *model.Sale) SaleResponse {
 	}
 	return response
 }
+
+type DailyTotalResponse struct {
+	Day             string `json:"day"`
+	DailyTotalCents int64  `json:"dailyTotalCents"`
+	SaleCount       int64  `json:"saleCount"`
+}
+type MonthlyTotalResponse struct {
+	Month             string `json:"month"`
+	MonthlyTotalCents int64  `json:"monthlyTotalCents"`
+	SaleCount         int64  `json:"saleCount"`
+}
+type TopProductResponse struct {
+	ProductID         string `json:"productId"`
+	TotalQuantity     int64  `json:"totalQuantity"`
+	TotalRevenueCents int64  `json:"totalRevenueCents"`
+}
+type ReportResponse[R any] struct {
+	Data []R      `json:"data"`
+	Meta PageMeta `json:"meta"`
+}
