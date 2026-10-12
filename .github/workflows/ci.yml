@@ -15,6 +15,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Sales DB launcher contract
+        run: |
+          python3 tests/test_owner_launcher.py
       - name: Verify common repository files exist
         run: |
           set -e
