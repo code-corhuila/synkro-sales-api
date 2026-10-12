@@ -39,6 +39,13 @@ func (p Principal) CanRead() bool {
 	return (p.Role == "ADMIN" || p.Role == "SALESPERSON") && p.has("sales:read")
 }
 
+// CanReadReports applies authentication.md: reports need reports:read, held
+// by ADMIN and by SALESPERSON (own sales only). INVENTORY and service tokens
+// never read reports, even if their token claims the permission.
+func (p Principal) CanReadReports() bool {
+	return (p.Role == "ADMIN" || p.Role == "SALESPERSON") && p.has("reports:read")
+}
+
 type principalKey struct{}
 
 func principalFrom(ctx context.Context) Principal {
