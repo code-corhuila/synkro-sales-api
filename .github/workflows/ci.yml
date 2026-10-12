@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [develop, qa, main, fix/root-composition-integration]
+    branches: [develop, qa, main, feat/sales-http-rbac, fix/root-composition-integration]
   pull_request:
     branches: [develop, qa, main]
 
@@ -16,7 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify root deployment contract
-        run: python3 tests/test_root_deploy.py
+        run: |
+          python3 tests/test_root_deploy.py
+          python3 tests/test_reconciled_deployment.py
       - name: Verify common repository files exist
         run: |
           set -e
@@ -78,7 +80,7 @@ jobs:
               exit 1
             }
           }'
-      - name: Architecture check — domain imports nothing but the standard library
+      - name: Architecture check â€” domain imports nothing but the standard library
         run: |
           set -e
           violations=$(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./internal/domain/... | grep -v '^github.com/code-corhuila/synkro-sales-api' || true)
@@ -100,7 +102,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-sales-db
-          ref: ffdc24b9ce7c84b745b30bb1e85b76b07d029475
+          ref: 9cfbde7db4bea7bacad70370c60f91f8eb917c04
           path: sales-db
           persist-credentials: false
       - name: Migrate isolated MongoDB 7.0 and run required integration scenarios

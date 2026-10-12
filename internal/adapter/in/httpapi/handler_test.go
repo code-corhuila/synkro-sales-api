@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestHealth_ReturnsOkWithNoToken(t *testing.T) {
-	srv := httptest.NewServer(NewRouter())
+	srv := httptest.NewServer(NewRouter(Dependencies{Health: func(context.Context) error { return nil }}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/health")
@@ -37,7 +38,7 @@ func TestHealth_ReturnsOkWithNoToken(t *testing.T) {
 }
 
 func TestProtectedRoute_Returns401WithNoToken(t *testing.T) {
-	srv := httptest.NewServer(NewRouter())
+	srv := httptest.NewServer(NewRouter(Dependencies{}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/v1/sales/some-id")
@@ -66,7 +67,7 @@ func TestProtectedRoute_Returns401WithNoToken(t *testing.T) {
 }
 
 func TestProtectedRoute_Returns401WithMalformedToken(t *testing.T) {
-	srv := httptest.NewServer(NewRouter())
+	srv := httptest.NewServer(NewRouter(Dependencies{}))
 	defer srv.Close()
 
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/sales/some-id", nil)
