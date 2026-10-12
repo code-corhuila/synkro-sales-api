@@ -2,7 +2,7 @@
 
 > sales bounded context: service API
 
-Part of the **SynkroTech SAS Sales Management System** — organization `code-corhuila`.
+Part of the **SynkroTech SAS Sales Management System** â€” organization `code-corhuila`.
 Governance and documentation live in [`synkro-docs`](https://github.com/code-corhuila/synkro-docs).
 
 ## Running locally
@@ -42,15 +42,15 @@ service names. Identity headers such as `X-User-Id` have no effect.
 | `GET /api/v1/sales` | `ADMIN` or `SALESPERSON`, `sales:read` | Paginated active sales; salesperson ownership applies to both database reads and counts |
 | `GET /api/v1/sales/{id}` | `ADMIN` or `SALESPERSON`, `sales:read` | Active sale; another salesperson's sale returns `403`; missing/inactive returns `404` |
 
-Registration accepts only `customerId`, `createdBy` and 1–100 `details` with
+Registration accepts only `customerId`, `createdBy` and 1â€“100 `details` with
 `productId`, integer `quantity`, and integer `unitPriceCents`. It requires an
-8–128-character `Idempotency-Key`. The trusted workflow supplies the original
+8â€“128-character `Idempotency-Key`. The trusted workflow supplies the original
 human author; Sales performs no customer/stock calls. The existing domain
 generates all calculated amounts and detects arithmetic/storage invariants.
 Invalid input is `400`; domain invariants in a new request are `422`; stored
 corruption and unexpected persistence failures are neutral `500` responses.
 
-Lists accept only `page` (default 1), `limit` (1–100, default 20), optional
+Lists accept only `page` (default 1), `limit` (1â€“100, default 20), optional
 `customerId`, and optional `from`/`to` in `YYYY-MM-DD` format. UTC days are
 inclusive using an exclusive next-day end. Sorting is `date DESC, _id DESC`.
 Empty lists have `data: []`, `total: 0`, and `totalPages: 0`. Unknown, repeated,
@@ -138,8 +138,8 @@ revision above, and pass that path to the launcher. The original dependency
 checkout does not need to change. Git Bash uses the native Docker Desktop client.
 
 Results are saved in the ignored `.integration-results/` directory: Go JSON test
-events and full-repository coverage. The gate verifies domain ≥90%, application
-≥80%, infrastructure ≥60% (adapters, config and command entrypoint), global ≥80%.
+events and full-repository coverage. The gate verifies domain â‰¥90%, application
+â‰¥80%, infrastructure â‰¥60% (adapters, config and command entrypoint), global â‰¥80%.
 GitHub Actions preserves its ordinary 80% global coverage gate and adds a mandatory
  integration job for the permanent branches and PRs targeting `develop`, `qa`, `main`.
 Cleanup removes only this run's containers, exclusive network and runner image/tag;
@@ -177,7 +177,7 @@ direct-token authorship rule: workflow body `createdBy` remains the human author
 
 ## Branching
 
-Three permanent branches. **None of them accepts a direct commit** — you enter through a child
+Three permanent branches. **None of them accepts a direct commit** â€” you enter through a child
 branch and leave through a Pull Request.
 
 ```
@@ -193,3 +193,15 @@ branch into another: `merge develop -> qa` and `merge qa -> main` do not exist i
 rule.
 
 Full policy: `00-governance/branching-policy.md` in `synkro-docs`.
+
+Root deployment requires SALES_APP_MONGODB_URI, a complete URI for sales_app authenticated in admin with replicaSet=rs0 and bounded connection/server-selection timeouts. The deploy composition maps it to the application's MONGODB_URI. The Sales migration runner's MONGODB_URI is a separate administrator connection; never reuse it for this service.
+
+
+The root Compose deployment selects exactly one public-key source: `JWT_PUBLIC_KEY_FILE`
+points to `/run/secrets/sales_jwt_public_key`, mounted read-only from the required
+absolute `JWT_PUBLIC_KEY_PATH`. It sets inline `JWT_PUBLIC_KEY` empty even if another
+included service uses that input. The standalone binary still supports either source.
+`MONGODB_TIMEOUT` and `MONGODB_MAX_POOL_SIZE` retain their published 5s/10 defaults
+and operator overrides. The required real MongoDB CI suite uses the published secure
+Sales DB revision `9cfbde7db4bea7bacad70370c60f91f8eb917c04`; no migration guard or
+HTTP, architecture, race, unit or coverage check is removed.
