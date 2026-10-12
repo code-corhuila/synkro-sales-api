@@ -55,7 +55,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 	collection := client.Database("sales").Collection("sale")
 	repo := NewMongoRepository(collection)
 	dependencies := func(client *mongo.Client, repo *MongoRepository) httpapi.Dependencies {
-		return httpapi.Dependencies{Register: usecase.NewRegisterSale(repo, integrationIDs{}, clock), Queries: usecase.NewSalesQueries(repo), Verifier: verifier, Health: func(ctx context.Context) error { return client.Ping(ctx, nil) }, Clock: clock, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)), Timeout: 2 * time.Second}
+		return httpapi.Dependencies{Register: usecase.NewRegisterSale(repo, integrationIDs{}, clock), Queries: usecase.NewSalesQueries(repo), Reports: usecase.NewSalesReports(repo), Verifier: verifier, Health: func(ctx context.Context) error { return client.Ping(ctx, nil) }, Clock: clock, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)), Timeout: 2 * time.Second}
 	}
 	router := httpapi.NewRouter(dependencies(client, repo))
 	token := func(sub, role, permission string) string {
@@ -259,6 +259,10 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		if w.Code != 503 {
 			t.Fatal(w.Code, w.Body.String())
 		}
+	})
+	runReportHTTPIntegration(t, collection, router, request, func() http.Handler {
+		unavailable := integrationClient(t, "mongodb://127.0.0.1:1/sales?directConnection=true")
+		return httpapi.NewRouter(dependencies(unavailable, NewMongoRepository(unavailable.Database("sales").Collection("sale"))))
 	})
 	t.Run("NoDeletePermission", func(t *testing.T) {
 		_, err := collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: original.SaleID}})
