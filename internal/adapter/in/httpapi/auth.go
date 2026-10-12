@@ -97,6 +97,9 @@ func (v *JWTVerifier) Verify(token string) (Principal, error) {
 		Algorithm string   `json:"alg"`
 		Critical  []string `json:"crit"`
 	}
+	if uniqueJSON(decoded[0]) != nil || uniqueJSON(decoded[1]) != nil {
+		return Principal{}, errCredential
+	}
 	if json.Unmarshal(decoded[0], &header) != nil || header.Algorithm != "RS256" || len(header.Critical) > 0 {
 		return Principal{}, errCredential
 	}
