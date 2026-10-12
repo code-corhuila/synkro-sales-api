@@ -19,6 +19,7 @@ jobs:
         run: |
           python3 tests/test_root_deploy.py
           python3 tests/test_reconciled_deployment.py
+          python3 tests/test_owner_launcher.py
       - name: Verify common repository files exist
         run: |
           set -e
