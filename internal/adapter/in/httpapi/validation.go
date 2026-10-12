@@ -1,28 +1,40 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/code-corhuila/synkro-sales-api/internal/application/port/in"
 	"io"
 	"math"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/code-corhuila/synkro-sales-api/internal/application/port/in"
+	"github.com/go-playground/validator/v10"
 )
 
 type registerRequest struct {
 	CustomerID string           `json:"customerId"`
 	CreatedBy  string           `json:"createdBy"`
-	Details    []registerDetail `json:"details"`
+	Details    []registerDetail `json:"details" validate:"required,min=1,max=100,dive"`
 }
 type registerDetail struct {
 	ProductID      string `json:"productId"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unitPriceCents"`
+	Quantity       int    `json:"quantity" validate:"gte=1,lte=2147483647"`
+	UnitPriceCents int64  `json:"unitPriceCents" validate:"gte=1"`
+}
+
+var requestValidator = newRequestValidator()
+
+func newRequestValidator() *validator.Validate {
+	v := validator.New()
+	v.RegisterTagNameFunc(func(field reflect.StructField) string { return strings.SplitN(field.Tag.Get("json"), ",", 2)[0] })
+	return v
 }
 
 func validationError(w http.ResponseWriter, field, message string) {
@@ -37,14 +49,23 @@ func registrationCommand(w http.ResponseWriter, r *http.Request) (in.RegisterSal
 		return in.RegisterSaleCommand{}, false
 	}
 	var body registerRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024))
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024*1024))
+	if err != nil || uniqueJSON(raw) != nil || requestFields(raw) != nil {
+		validationError(w, "body", "must contain one unambiguous JSON object with documented fields")
+		return in.RegisterSaleCommand{}, false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&body) != nil {
 		validationError(w, "body", "must be a valid JSON object with only documented fields")
 		return in.RegisterSaleCommand{}, false
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		validationError(w, "body", "must contain exactly one JSON object")
+	if err := requestValidator.Struct(body); err != nil {
+		field := "details"
+		if violations, ok := err.(validator.ValidationErrors); ok && len(violations) > 0 {
+			field = strings.TrimPrefix(violations[0].Namespace(), "registerRequest.")
+		}
+		validationError(w, field, "must contain 1 to 100 lines with positive integer quantities and prices")
 		return in.RegisterSaleCommand{}, false
 	}
 	if !canonicalID(body.CustomerID) {
@@ -55,23 +76,11 @@ func registrationCommand(w http.ResponseWriter, r *http.Request) (in.RegisterSal
 		validationError(w, "createdBy", "must be a canonical UUID")
 		return in.RegisterSaleCommand{}, false
 	}
-	if len(body.Details) < 1 || len(body.Details) > 100 {
-		validationError(w, "details", "must contain 1 to 100 lines")
-		return in.RegisterSaleCommand{}, false
-	}
 	cmd := in.RegisterSaleCommand{IdempotencyKey: key, CustomerID: body.CustomerID, CreatedBy: body.CreatedBy, Lines: make([]in.RegisterSaleLine, len(body.Details))}
 	for i, d := range body.Details {
 		field := fmt.Sprintf("details[%d]", i)
 		if !canonicalID(d.ProductID) {
 			validationError(w, field+".productId", "must be a canonical UUID")
-			return in.RegisterSaleCommand{}, false
-		}
-		if d.Quantity < 1 || d.Quantity > math.MaxInt32 {
-			validationError(w, field+".quantity", "must be an integer between 1 and 2147483647")
-			return in.RegisterSaleCommand{}, false
-		}
-		if d.UnitPriceCents < 1 {
-			validationError(w, field+".unitPriceCents", "must be a positive int64")
 			return in.RegisterSaleCommand{}, false
 		}
 		cmd.Lines[i] = in.RegisterSaleLine{ProductID: d.ProductID, Quantity: d.Quantity, UnitPriceCents: d.UnitPriceCents}
