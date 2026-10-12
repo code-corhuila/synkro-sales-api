@@ -33,6 +33,11 @@ func evidenceFixture(t *testing.T) {
 		events.Write(event)
 		events.WriteByte('\n')
 	}
+	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission"} {
+		event, _ := json.Marshal(map[string]string{"Action": "pass", "Test": "TestMongoIntegration/HTTP/" + name})
+		events.Write(event)
+		events.WriteByte('\n')
+	}
 	writeEvidence(t, "tests.json", events.String())
 	writeEvidence(t, "coverage.out", "mode: atomic\nrepo/internal/domain/model.go:1.1,2.1 10 1\nrepo/internal/application/app.go:1.1,2.1 10 1\nrepo/internal/adapter/out/persistence/mongo.go:1.1,2.1 10 1\n")
 }
