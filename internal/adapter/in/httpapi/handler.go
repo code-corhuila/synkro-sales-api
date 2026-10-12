@@ -25,7 +25,7 @@ func NewRouter() http.Handler {
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /health", handleHealth)
-	root.Handle("/api/v1/", requireAuth(protected))
+	root.Handle("/api/v1/", requireAuth(nil, protected))
 	return root
 }
 
