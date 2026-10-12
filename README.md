@@ -7,6 +7,12 @@ Governance and documentation live in [`synkro-docs`](https://github.com/code-cor
 
 ## Running locally
 
+Apply the Sales DB migrations first. Supply `MONGODB_URI` for `sales_app` and
+exactly one of `JWT_PUBLIC_KEY` (PEM, including literal escaped `\n`) or
+`JWT_PUBLIC_KEY_FILE` (an accessible public PEM file). Missing or invalid keys
+stop startup; there is no development authentication bypass. Never use an
+administrator URI or put credentials/private keys in this repository.
+
 ```bash
 go run ./cmd/sales-api
 ```
@@ -16,6 +22,45 @@ The service listens on `:8080` (override with `HTTP_PORT`). Verify it:
 ```bash
 curl http://localhost:8080/health
 ```
+
+Public `/health` pings this service's MongoDB replica set: `200` with database
+`ok`, or `503` with database `down`. `MONGODB_TIMEOUT` defaults to `5s` (maximum
+`10s`), and `MONGODB_MAX_POOL_SIZE` defaults to `10`. The server has explicit
+header/read/write/idle limits of 5/10/15/60 seconds and a 20-second shutdown.
+
+## Sales HTTP endpoints (HU-VEN-09)
+
+All Sales operations require an RS256 token verified against the configured
+Auth public key. Claims `sub`, `roles`, `permissions`, `iat`, `exp` and `jti`
+are required; expiration and issued-at use at most 30 seconds of clock skew.
+Human subjects are canonical UUIDs; service subjects are the documented
+service names. Identity headers such as `X-User-Id` have no effect.
+
+| Operation | Required signed identity and permission | Result |
+|---|---|---|
+| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; same key returns original sale with `200` |
+| `GET /api/v1/sales` | `ADMIN` or `SALESPERSON`, `sales:read` | Paginated active sales; salesperson ownership applies to both database reads and counts |
+| `GET /api/v1/sales/{id}` | `ADMIN` or `SALESPERSON`, `sales:read` | Active sale; another salesperson's sale returns `403`; missing/inactive returns `404` |
+
+Registration accepts only `customerId`, `createdBy` and 1–100 `details` with
+`productId`, integer `quantity`, and integer `unitPriceCents`. It requires an
+8–128-character `Idempotency-Key`. The trusted workflow supplies the original
+human author; Sales performs no customer/stock calls. The existing domain
+generates all calculated amounts and detects arithmetic/storage invariants.
+Invalid input is `400`; domain invariants in a new request are `422`; stored
+corruption and unexpected persistence failures are neutral `500` responses.
+
+Lists accept only `page` (default 1), `limit` (1–100, default 20), optional
+`customerId`, and optional `from`/`to` in `YYYY-MM-DD` format. UTC days are
+inclusive using an exclusive next-day end. Sorting is `date DESC, _id DESC`.
+Empty lists have `data: []`, `total: 0`, and `totalPages: 0`. Unknown, repeated,
+empty or malformed filters are rejected before querying MongoDB.
+
+Responses use explicit contract DTOs; they never expose an idempotency key or
+database metadata. Every request reuses or generates `X-Correlation-Id`; error
+`traceId` matches it, and structured JSON logs include it. Unsupported methods
+return `400 VALIDATION_ERROR` with `Allow`, preserving the documented code/status
+catalog; unknown routes use `404 NOT_FOUND`.
 
 ## Running the tests
 
@@ -29,12 +74,12 @@ go test ./...
 application's `SaleRepository`. Inject `client.Database("sales").Collection("sale")`
 from one shared official MongoDB v2.8.2 client; its pool and shutdown belong to the
 composition root. Connect as `sales_app`, authenticated in `admin`, with only
-`sales_writer@sales`. `MONGODB_URI` in `.env.example` documents the future runtime
+`sales_writer@sales`. `MONGODB_URI` in `.env.example` documents the runtime
 configuration. URL-encode the password and supply it through secret storage.
 Do not use migration administrator credentials in the application.
 
-Runtime wiring is deferred: the current routes and `/health` keep their existing
-behavior, and `config.Load` does not yet consume `MONGODB_URI`. The adapter never
+The composition root wires registration, query use cases, JWT verification,
+and the database health check with the same pooled client. The adapter never
 creates collections, indexes, roles or clients. Apply the Sales DB migrations before
 using it. One complete `InsertOne` stores the sale and idempotency key together;
 the migrated unique index is the concurrency boundary. Duplicate errors trigger a
@@ -82,11 +127,21 @@ requires every real scenario to have executed and passed, including 32 concurren
 calls, schema rejection, denied removal, unsafe replay and connection/context errors.
 A skipped scenario, missing URI, failed migration or failed test returns nonzero.
 
+HU-VEN-09 adds ten mandatory HTTP scenarios to those ten persistence scenarios:
+creation, replay, ADMIN reads, salesperson filtering, foreign-sale rejection,
+unknown/inactive exclusion, pagination/UTC boundaries, corrupt-document rejection,
+database failure propagation, and denied deletion. HTTP tests use generated test
+RSA keys and the real registration/query use cases; no authentication bypass is
+used. For a local pinned dependency copy, clone it inside the ignored
+`.integration-results/` directory with `core.autocrlf=false`, check out the exact
+revision above, and pass that path to the launcher. The original dependency
+checkout does not need to change. Git Bash uses the native Docker Desktop client.
+
 Results are saved in the ignored `.integration-results/` directory: Go JSON test
 events and full-repository coverage. The gate verifies domain ≥90%, application
 ≥80%, infrastructure ≥60% (adapters, config and command entrypoint), global ≥80%.
 GitHub Actions preserves its ordinary 80% global coverage gate and adds a mandatory
-integration job for the permanent branches and PRs targeting `develop`, `qa`, `main`.
+ integration job for the permanent branches and PRs targeting `develop`, `qa`, `main`.
 Cleanup removes only this run's containers, exclusive network and runner image/tag;
 the existing `synkro-mongo` and its volumes are never targeted.
 
@@ -96,6 +151,29 @@ test strategy permits broader local targets, but this launcher intentionally req
 a disposable instance so permission probes cannot touch persistent data. ADR-010,
 the data model and migrations include detail `active`; the entity catalog and current
 domain omit it, which is why inactive restoration is rejected.
+
+### Contract review notes for HU-VEN-09
+
+The 16 requested source documents were read from
+`synkro-docs/main@61056c93e6e0783a9199bf56778e9494739bc458`.
+The story is [HU-VEN-09, issue #240](https://github.com/code-corhuila/synkro-docs/issues/240).
+No documentation repository or applied migration was changed.
+
+The Sales OpenAPI omits a detail `400` response and persistence `500` responses,
+although this story and shared guidelines require them. Its server base ends
+in `/api/v1`, which would place its `/health` path under that prefix; the
+explicit public `/health` requirement is implemented. The closed error catalog
+has no method-not-allowed status/code pairing, so unsupported methods use the
+documented `400 VALIDATION_ERROR`. Approval is required for a later OpenAPI
+amendment; these gaps were reported before implementation.
+
+The entity catalog and domain omit a detail lifecycle flag while ADR-010 and
+OpenAPI include it. The existing decoder still rejects inactive details and
+inconsistent amounts instead of inventing state. Root inactive documents are
+excluded in MongoDB and return `404`. The functional requirement's old `CHECK`
+description and parts of the traceability matrix remain historical and do not
+describe the delivered MongoDB adapter. ADR-006 supersedes ADR-002's older
+direct-token authorship rule: workflow body `createdBy` remains the human author.
 
 ## Branching
 
