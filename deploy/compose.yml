@@ -5,6 +5,7 @@ services:
       dockerfile: deploy/Dockerfile
     environment:
       HTTP_PORT: "8080"
+      MONGODB_URI: ${SALES_APP_MONGODB_URI:?set application-only Sales MongoDB URI}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     expose: ["8080"]
     networks: [platform]

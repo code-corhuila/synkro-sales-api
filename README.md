@@ -115,3 +115,5 @@ branch into another: `merge develop -> qa` and `merge qa -> main` do not exist i
 rule.
 
 Full policy: `00-governance/branching-policy.md` in `synkro-docs`.
+
+Root deployment requires SALES_APP_MONGODB_URI, a complete URI for sales_app authenticated in admin with replicaSet=rs0 and bounded connection/server-selection timeouts. The deploy composition maps it to the application's MONGODB_URI. The Sales migration runner's MONGODB_URI is a separate administrator connection; never reuse it for this service.

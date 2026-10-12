@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [develop, qa, main]
+    branches: [develop, qa, main, fix/root-composition-integration]
   pull_request:
     branches: [develop, qa, main]
 
@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Verify root deployment contract
+        run: python3 tests/test_root_deploy.py
       - name: Verify common repository files exist
         run: |
           set -e
