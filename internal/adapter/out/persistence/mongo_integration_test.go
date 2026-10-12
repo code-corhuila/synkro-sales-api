@@ -87,6 +87,7 @@ func TestMongoIntegration(t *testing.T) {
 	}
 	collection := client.Database("sales").Collection("sale")
 	repo := NewMongoRepository(collection)
+	t.Run("HTTP", func(t *testing.T) { runHTTPIntegration(t, client) })
 	newKey := func() string { return uuid.NewString() + ":register-sale" }
 	countOne := func(t *testing.T, key string) {
 		t.Helper()
