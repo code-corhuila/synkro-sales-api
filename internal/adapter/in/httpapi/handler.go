@@ -17,6 +17,7 @@ import (
 type Dependencies struct {
 	Register in.RegisterSaleUseCase
 	Queries  in.SalesQueryUseCase
+	Reports  in.SalesReportUseCase
 	Verifier *JWTVerifier
 	Health   func(context.Context) error
 	Clock    out.Clock
@@ -117,6 +118,11 @@ func (d Dependencies) serveSales(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Allow", "GET, POST")
 			validationError(w, "method", "unsupported method")
 		}
+		return
+	}
+	// Reports are matched explicitly, before any generic sale-identifier match.
+	if path == reportsPath || strings.HasPrefix(path, reportsPath+"/") {
+		d.serveReport(w, r)
 		return
 	}
 	if strings.HasPrefix(path, "/api/v1/sales/") && !strings.Contains(strings.TrimPrefix(path, "/api/v1/sales/"), "/") && strings.TrimPrefix(path, "/api/v1/sales/") != "" {
