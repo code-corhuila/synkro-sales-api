@@ -66,9 +66,12 @@ network_owned=1
 mongo_attempted=1
 bash "$db_dir/deploy/ci/start-replica-set.sh"
 # Verify tmpfs, the safety label and exact target before migration or probes.
+# The owner helper resolves deploy/ci/connection.js relative to its own checkout.
+cd "$db_dir"
 # shellcheck source=/dev/null
 source "$db_dir/deploy/ci/ci-env.sh"
 require_disposable_database
+cd "$api_dir"
 image_attempted=1
 docker build -t "$image" -f "$(host_path "$db_dir/deploy/liquibase.Dockerfile")" "$(host_path "$db_dir/deploy")" >"$scratch/migration.log" 2>&1 || { cat "$scratch/migration.log"; exit 1; }
 export LIQUIBASE_COMMAND_URL="$MONGODB_URI/sales?$MONGODB_OPTIONS"
