@@ -236,6 +236,8 @@ func (d Dependencies) detail(w http.ResponseWriter, r *http.Request, id string) 
 // statusFor is the only mapping from application/domain failures to HTTP.
 func statusFor(err error) (int, string, string, []ErrorDetail) {
 	switch {
+	case errors.Is(err, in.ErrPersistenceFailure):
+		return 500, "INTERNAL_ERROR", "Unexpected error", nil
 	case errors.Is(err, in.ErrSaleNotFound):
 		return 404, "NOT_FOUND", "Resource not found", nil
 	case errors.Is(err, in.ErrInvalidQuery), errors.Is(err, in.ErrInvalidIdempotencyKey):

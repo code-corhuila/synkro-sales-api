@@ -35,6 +35,8 @@ type integrationIDs struct{}
 func (integrationIDs) NewID() string { return uuid.NewString() }
 
 func runHTTPIntegration(t *testing.T, client *mongo.Client) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -88,7 +90,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &original) != nil || original.CreatedBy != owner || original.TotalCents != 2500 || w.Header().Get("Location") != "/api/v1/sales/"+original.SaleID {
 			t.Fatal(w.Code, w.Body.String())
 		}
-		total, err := collection.CountDocuments(context.Background(), bson.D{{Key: "idempotencyKey", Value: idempotency}})
+		total, err := collection.CountDocuments(ctx, bson.D{{Key: "idempotencyKey", Value: idempotency}})
 		if err != nil || total != 1 {
 			t.Fatal("atomic HTTP insertion not observed", err)
 		}
@@ -102,7 +104,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &got) != nil || got.SaleID != original.SaleID || got.TotalCents != original.TotalCents || got.Details[0].DetailID != original.Details[0].DetailID {
 			t.Fatal(w.Code, w.Body.String())
 		}
-		total, err := collection.CountDocuments(context.Background(), bson.D{{Key: "idempotencyKey", Value: idempotency}})
+		total, err := collection.CountDocuments(ctx, bson.D{{Key: "idempotencyKey", Value: idempotency}})
 		if err != nil || total != 1 {
 			t.Fatal("replay inserted another document", err)
 		}
@@ -138,7 +140,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		if inconsistent {
 			doc["totalCents"] = int64(1)
 		}
-		if _, err := collection.InsertOne(context.Background(), doc); err != nil {
+		if _, err := collection.InsertOne(ctx, doc); err != nil {
 			t.Fatal(err)
 		}
 		return s.ID()
@@ -214,6 +216,31 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		if w.Code != 500 {
 			t.Fatal("list silently skipped corruption", w.Code, w.Body.String())
 		}
+		// A faithfully typed document can still overflow domain arithmetic.
+		// Its restoration failure is a database error, including on replay.
+		doc := validDocument(t)
+		key := uuid.NewString() + ":corrupt-replay"
+		doc["idempotencyKey"] = key
+		doc["customerId"] = customer
+		doc["createdBy"] = owner
+		doc["totalCents"] = int64(1)
+		firstDetail(doc)["quantity"] = int32(2)
+		firstDetail(doc)["unitPriceCents"] = int64(9223372036854775807)
+		firstDetail(doc)["subtotalCents"] = int64(1)
+		if _, err := collection.InsertOne(ctx, doc); err != nil {
+			t.Fatal(err)
+		}
+		w = request(router, "GET", "/api/v1/sales/"+doc["_id"].(string), "", owner, "ADMIN", "sales:read")
+		if w.Code != 500 {
+			t.Fatal("stored overflow was not internal", w.Code, w.Body.String())
+		}
+		originalKey := idempotency
+		idempotency = key
+		w = request(router, "POST", "/api/v1/sales", body, "synkro-workflow", "SERVICE", "sales:register")
+		idempotency = originalKey
+		if w.Code != 500 || !strings.Contains(w.Body.String(), `"error":"INTERNAL_ERROR"`) {
+			t.Fatal("unsafe replay exposed as request invariant", w.Code, w.Body.String())
+		}
 	})
 	t.Run("DatabaseFailure", func(t *testing.T) {
 		unavailable := integrationClient(t, "mongodb://127.0.0.1:1/sales?directConnection=true")
@@ -234,12 +261,12 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		}
 	})
 	t.Run("NoDeletePermission", func(t *testing.T) {
-		_, err := collection.DeleteOne(context.Background(), bson.D{{Key: "_id", Value: original.SaleID}})
+		_, err := collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: original.SaleID}})
 		var command mongo.CommandError
 		if !errors.As(err, &command) || command.Code != 13 {
 			t.Fatal("sales_app deletion not denied", err)
 		}
-		sale, err := repo.FindActiveByID(context.Background(), original.SaleID)
+		sale, err := repo.FindActiveByID(ctx, original.SaleID)
 		if err != nil || sale.ID() != original.SaleID {
 			t.Fatal("denied deletion altered sale", err)
 		}

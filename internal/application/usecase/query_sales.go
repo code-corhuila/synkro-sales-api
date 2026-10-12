@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/code-corhuila/synkro-sales-api/internal/application/port/in"
 	"github.com/code-corhuila/synkro-sales-api/internal/application/port/out"
 	"github.com/code-corhuila/synkro-sales-api/internal/domain/model"
@@ -20,7 +21,7 @@ func (u *SalesQueries) Get(ctx context.Context, id string) (*model.Sale, error) 
 		return nil, in.ErrSaleNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", in.ErrPersistenceFailure, err)
 	}
 	if sale == nil {
 		return nil, errors.New("repository returned no sale without an error")
@@ -37,11 +38,11 @@ func (u *SalesQueries) List(ctx context.Context, q in.ListSalesQuery) (in.ListSa
 	filter := out.SaleFilter{CustomerID: q.CustomerID, CreatedBy: q.CreatedBy, From: q.From, Until: q.Until, Page: q.Page, Limit: q.Limit}
 	sales, err := u.repo.ListActive(ctx, filter)
 	if err != nil {
-		return in.ListSalesResult{}, err
+		return in.ListSalesResult{}, fmt.Errorf("%w: %w", in.ErrPersistenceFailure, err)
 	}
 	total, err := u.repo.CountActive(ctx, filter)
 	if err != nil {
-		return in.ListSalesResult{}, err
+		return in.ListSalesResult{}, fmt.Errorf("%w: %w", in.ErrPersistenceFailure, err)
 	}
 	if total < 0 {
 		return in.ListSalesResult{}, errors.New("repository returned a negative count")
