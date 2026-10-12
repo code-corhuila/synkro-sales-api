@@ -31,7 +31,8 @@ class ReconciledDeployment(unittest.TestCase):
             self.assertEqual(settings['JWT_PUBLIC_KEY_FILE'], '/run/secrets/sales_jwt_public_key')
             self.assertNotIn('ports', service)
             self.assertTrue(model['networks']['platform']['external'])
-            secret = next(value for value in service['secrets'] if value['target'] == 'sales_jwt_public_key')
+            secret = next(value for value in service['secrets'] if Path(value['target']).name == 'sales_jwt_public_key')
+            self.assertEqual(secret['target'] if secret['target'].startswith('/') else '/run/secrets/' + secret['target'], settings['JWT_PUBLIC_KEY_FILE'])
             self.assertEqual(Path(model['secrets'][secret['source']]['file']).resolve(), public.resolve())
             self.assertNotIn('migration_admin', json.dumps(service))
 
