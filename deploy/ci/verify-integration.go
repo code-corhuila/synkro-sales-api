@@ -29,6 +29,9 @@ func verify() error {
 	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
 		required["TestMongoIntegration/"+name] = false
 	}
+	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission"} {
+		required["TestMongoIntegration/HTTP/"+name] = false
+	}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
 	for scanner.Scan() {
@@ -58,7 +61,7 @@ func verify() error {
 			return fmt.Errorf("no executed passing evidence for %s", name)
 		}
 	}
-	fmt.Println("All 10 required real MongoDB integration scenarios executed and passed")
+	fmt.Printf("All %d required real MongoDB integration scenarios executed and passed\n", len(required))
 	return coverage()
 }
 
