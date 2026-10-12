@@ -154,7 +154,7 @@ faithfully. No domain lifecycle attributes or behavior were introduced.
 ### Real integration tests
 
 Use Docker and Bash (Git Bash on Windows). The compatible migrations are pinned to
-[`synkro-sales-db@ffdc24b`](https://github.com/code-corhuila/synkro-sales-db/tree/ffdc24b9ce7c84b745b30bb1e85b76b07d029475).
+[`synkro-sales-db@9cfbde7`](https://github.com/code-corhuila/synkro-sales-db/tree/9cfbde7db4bea7bacad70370c60f91f8eb917c04).
 The launcher requires a clean checkout at that exact commit and reads it without
 modifying it. The approved documentation reviewed for this adapter is
 `synkro-docs/main@61056c93e6e0783a9199bf56778e9494739bc458`.
