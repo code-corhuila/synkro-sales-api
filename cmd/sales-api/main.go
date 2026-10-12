@@ -42,9 +42,9 @@ func main() {
 			a.Key = "message"
 		}
 		return a
-	}})).With("service", "synkro-sales-api")
+	}}))
 	if err := run(logger); err != nil {
-		logger.Error("service stopped", "failureType", "startup_or_server_failure")
+		logger.Error("service stopped", "service", "synkro-sales-api", "failureType", "startup_or_server_failure", "reason", err.Error())
 		os.Exit(1)
 	}
 }
@@ -80,7 +80,7 @@ func run(logger *slog.Logger) error {
 	defer stop()
 	done := make(chan error, 1)
 	go func() { done <- srv.ListenAndServe() }()
-	logger.Info("starting synkro-sales-api", "port", cfg.HTTPPort)
+	logger.Info("starting synkro-sales-api", "service", "synkro-sales-api", "port", cfg.HTTPPort)
 	select {
 	case err := <-done:
 		if errors.Is(err, http.ErrServerClosed) {

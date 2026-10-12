@@ -25,7 +25,7 @@ type registerRequest struct {
 }
 type registerDetail struct {
 	ProductID      string `json:"productId"`
-	Quantity       int    `json:"quantity" validate:"gte=1,lte=2147483647"`
+	Quantity       int    `json:"quantity" validate:"gte=1"`
 	UnitPriceCents int64  `json:"unitPriceCents" validate:"gte=1"`
 }
 
