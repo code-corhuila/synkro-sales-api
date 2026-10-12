@@ -66,6 +66,12 @@ func (s *reportSpy) calls() int {
 	return len(s.kinds)
 }
 
+var (
+	reportKeyOnce sync.Once
+	reportKey     *rsa.PrivateKey
+	reportPublic  string
+)
+
 type reportFixture struct {
 	router http.Handler
 	spy    *reportSpy
@@ -76,7 +82,9 @@ type reportFixture struct {
 
 func newReportFixture(t *testing.T, withReports bool) reportFixture {
 	t.Helper()
-	key, public := testKey(t)
+	// RSA key generation dominates a table of ~150 fixtures: share one key.
+	reportKeyOnce.Do(func() { reportKey, reportPublic = testKey(t) })
+	key, public := reportKey, reportPublic
 	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
 	clock := fixedClock{now}
 	verifier, err := NewJWTVerifier(public, clock)
