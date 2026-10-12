@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Start only disposable resources, using the real pinned Sales DB runner.
 set -euo pipefail
+# Docker Desktop ships a shell wrapper that may not work under Git Bash.
+# Export the native client shim so the read-only migration scripts reuse it.
+if command -v cygpath >/dev/null && command -v docker.exe >/dev/null; then
+  docker() { command docker.exe "$@"; }
+  export -f docker
+fi
 DB_REF=ffdc24b9ce7c84b745b30bb1e85b76b07d029475
 api_dir=$(cd "$(dirname "$0")/../.." && pwd)
 db_dir=$(cd "${1:?usage: bash deploy/ci/mongo-integration.sh /path/to/synkro-sales-db}" && pwd)
@@ -80,7 +86,7 @@ docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$toke
   -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.23 bash -euo pipefail -c '
     getent hosts "$TEST_MONGO_HOST"
     go version
-    go test deploy/ci/verify-integration.go deploy/ci/verify-integration_test.go
+    go test deploy/ci/verify-integration.go deploy/ci/verify-integration_test.go deploy/ci/http-evidence_test.go
     go test -count=1 -race -coverprofile=.integration-results/coverage.out -json ./... > .integration-results/tests.json
   ' || { cat "$api_dir/.integration-results/tests.json"; exit 1; }
 # Evidence gate: a skipped or absent required scenario must fail the job.
