@@ -74,7 +74,7 @@ func run(logger *slog.Logger) error {
 		_ = client.Disconnect(ctx)
 	}()
 	repo := persistence.NewMongoRepository(client.Database("sales").Collection("sale"))
-	router := httpapi.NewRouter(httpapi.Dependencies{Register: usecase.NewRegisterSale(repo, uuidGenerator{}, clock), Queries: usecase.NewSalesQueries(repo), Verifier: verifier, Health: func(ctx context.Context) error { return client.Ping(ctx, nil) }, Clock: clock, Logger: logger, Timeout: cfg.MongoTimeout})
+	router := httpapi.NewRouter(httpapi.Dependencies{Register: usecase.NewRegisterSale(repo, uuidGenerator{}, clock), Queries: usecase.NewSalesQueries(repo), Reports: usecase.NewSalesReports(repo), Verifier: verifier, Health: func(ctx context.Context) error { return client.Ping(ctx, nil) }, Clock: clock, Logger: logger, Timeout: cfg.MongoTimeout})
 	srv := &http.Server{Addr: ":" + cfg.HTTPPort, Handler: router, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

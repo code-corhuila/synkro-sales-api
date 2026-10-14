@@ -29,8 +29,12 @@ func verify() error {
 	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
 		required["TestMongoIntegration/"+name] = false
 	}
-	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission"} {
+	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission", "ReportsAdminAndSalesperson", "ReportsAccessControl", "ReportsPaginationAndMeta", "ReportsFiltersAndRouting", "ReportsDatabaseFailure"} {
 		required["TestMongoIntegration/HTTP/"+name] = false
+	}
+	// HU-VEN-10: the three report pipelines must run against the real database.
+	for _, name := range []string{"ActiveSelectionAndGrouping", "SalespersonOwnership", "UTCDayBoundaries", "MonthAndYearBoundaries", "TopProductsLinesTiesAndInactiveDetails", "PaginationOverGroups", "EmptyResults", "OverflowFailsSafely", "DatabaseFailureAndCancellation"} {
+		required["TestMongoIntegration/Reports/"+name] = false
 	}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
