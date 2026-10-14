@@ -5,6 +5,24 @@
 Part of the **SynkroTech SAS Sales Management System** — organization `code-corhuila`.
 Governance and documentation live in [`synkro-docs`](https://github.com/code-corhuila/synkro-docs).
 
+## Running locally
+
+```bash
+go run ./cmd/sales-api
+```
+
+The service listens on `:8080` (override with `HTTP_PORT`). Verify it:
+
+```bash
+curl http://localhost:8080/health
+```
+
+## Running the tests
+
+```bash
+go test ./...
+```
+
 ## Branching
 
 Three permanent branches. **None of them accepts a direct commit** — you enter through a child
