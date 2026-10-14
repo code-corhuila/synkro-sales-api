@@ -33,8 +33,13 @@ func evidenceFixture(t *testing.T) {
 		events.Write(event)
 		events.WriteByte('\n')
 	}
-	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission"} {
+	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission", "ReportsAdminAndSalesperson", "ReportsAccessControl", "ReportsPaginationAndMeta", "ReportsFiltersAndRouting", "ReportsDatabaseFailure"} {
 		event, _ := json.Marshal(map[string]string{"Action": "pass", "Test": "TestMongoIntegration/HTTP/" + name})
+		events.Write(event)
+		events.WriteByte('\n')
+	}
+	for _, name := range reportScenarios {
+		event, _ := json.Marshal(map[string]string{"Action": "pass", "Test": "TestMongoIntegration/Reports/" + name})
 		events.Write(event)
 		events.WriteByte('\n')
 	}
@@ -94,6 +99,49 @@ func TestEvidenceChecksLayerCoverage(t *testing.T) {
 		}
 		if err := verify(); err == nil {
 			t.Fatal("missing coverage accepted")
+		}
+	})
+}
+
+// reportScenarios are the HU-VEN-10 repository-level scenarios that must run
+// against the real MongoDB; any one missing, skipped or failed fails the job.
+var reportScenarios = []string{"ActiveSelectionAndGrouping", "SalespersonOwnership", "UTCDayBoundaries", "MonthAndYearBoundaries", "TopProductsLinesTiesAndInactiveDetails", "PaginationOverGroups", "EmptyResults", "OverflowFailsSafely", "DatabaseFailureAndCancellation"}
+
+func TestEvidenceRequiresEveryReportScenario(t *testing.T) {
+	required := []string{}
+	for _, name := range reportScenarios {
+		required = append(required, "TestMongoIntegration/Reports/"+name)
+	}
+	for _, name := range []string{"ReportsAdminAndSalesperson", "ReportsAccessControl", "ReportsPaginationAndMeta", "ReportsFiltersAndRouting", "ReportsDatabaseFailure"} {
+		required = append(required, "TestMongoIntegration/HTTP/"+name)
+	}
+	for _, missing := range required {
+		t.Run("missing "+missing, func(t *testing.T) {
+			evidenceFixture(t)
+			data, err := os.ReadFile(".integration-results/tests.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			kept := []string{}
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				if !strings.Contains(line, `"`+missing+`"`) {
+					kept = append(kept, line)
+				}
+			}
+			if len(kept) != strings.Count(strings.TrimSpace(string(data)), "\n") {
+				t.Fatalf("fixture does not contain %s", missing)
+			}
+			writeEvidence(t, "tests.json", strings.Join(kept, "\n")+"\n")
+			if err := verify(); err == nil {
+				t.Fatalf("evidence accepted without %s", missing)
+			}
+		})
+	}
+	t.Run("skipped report scenario", func(t *testing.T) {
+		evidenceFixture(t)
+		writeEvidence(t, "tests.json", `{"Action":"skip","Test":"TestMongoIntegration/Reports/EmptyResults"}`+"\n")
+		if err := verify(); err == nil {
+			t.Fatal("skipped report scenario accepted")
 		}
 	})
 }
