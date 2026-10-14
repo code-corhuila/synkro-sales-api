@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"unicode/utf8"
 
 	"github.com/code-corhuila/synkro-sales-api/internal/application/port/in"
@@ -44,7 +45,7 @@ func (u *RegisterSale) Register(ctx context.Context, cmd in.RegisterSaleCommand)
 
 	stored, created, err := u.repo.CreateOnce(ctx, cmd.IdempotencyKey, sale)
 	if err != nil {
-		return in.RegisterSaleResult{}, err
+		return in.RegisterSaleResult{}, fmt.Errorf("%w: %w", in.ErrPersistenceFailure, err)
 	}
 	return in.RegisterSaleResult{Sale: stored, Created: created}, nil
 }
