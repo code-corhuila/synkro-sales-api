@@ -164,7 +164,8 @@ faithfully. No domain lifecycle attributes or behavior were introduced.
 ### Real integration tests
 
 Use Docker and Bash (Git Bash on Windows). The compatible migrations are pinned to
-[`synkro-sales-db@9cfbde7`](https://github.com/code-corhuila/synkro-sales-db/tree/9cfbde7db4bea7bacad70370c60f91f8eb917c04).
+[`synkro-sales-db@v2.0.0 (344d917)`](https://github.com/code-corhuila/synkro-sales-db/tree/344d917264bbb5ad17c40d2e3a33f217a7a94866).
+The annotated tag `v2.0.0` (object `5bbad89`) resolves to commit `344d917`; the launcher pins the commit, not the tag object.
 The launcher requires a clean checkout at that exact commit and reads it without
 modifying it. The approved documentation reviewed for this adapter is
 `synkro-docs/main@61056c93e6e0783a9199bf56778e9494739bc458`.
@@ -267,5 +268,5 @@ absolute `JWT_PUBLIC_KEY_PATH`. It sets inline `JWT_PUBLIC_KEY` empty even if an
 included service uses that input. The standalone binary still supports either source.
 `MONGODB_TIMEOUT` and `MONGODB_MAX_POOL_SIZE` retain their published 5s/10 defaults
 and operator overrides. The required real MongoDB CI suite uses the published secure
-Sales DB revision `9cfbde7db4bea7bacad70370c60f91f8eb917c04`; no migration guard or
+Sales DB revision `344d917264bbb5ad17c40d2e3a33f217a7a94866`; no migration guard or
 HTTP, architecture, race, unit or coverage check is removed.
