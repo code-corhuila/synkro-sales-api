@@ -86,7 +86,7 @@ sed -e "s/$CI_ADMIN_PASSWORD/[REDACTED]/g" -e "s/$CI_SALES_APP_PASSWORD/[REDACTE
 mkdir -p "$api_dir/.integration-results"
 docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$token" --network "$MONGODB_NETWORK" \
   -e TEST_MONGODB_URI -e TEST_MONGO_HOST -e TEST_MONGODB_DISPOSABLE -e REQUIRE_MONGODB_INTEGRATION -e CGO_ENABLED \
-  -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.23 bash -euo pipefail -c '
+  -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.26.9 bash -euo pipefail -c '
     getent hosts "$TEST_MONGO_HOST"
     go version
     go test deploy/ci/verify-integration.go deploy/ci/verify-integration_test.go deploy/ci/http-evidence_test.go
@@ -94,4 +94,4 @@ docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$toke
   ' || { cat "$api_dir/.integration-results/tests.json"; exit 1; }
 # Evidence gate: a skipped or absent required scenario must fail the job.
 docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$token" \
-  -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.23 go run deploy/ci/verify-integration.go
+  -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.26.9 go run deploy/ci/verify-integration.go
