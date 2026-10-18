@@ -18,6 +18,7 @@ jobs:
       - name: Verify Sales DB launcher contract
         run: |
           python3 tests/test_owner_launcher.py
+          python3 tests/test_launcher_guards.py
       - name: Verify common repository files exist
         run: |
           set -e
@@ -115,7 +116,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-sales-db
-          ref: ffdc24b9ce7c84b745b30bb1e85b76b07d029475
+          ref: 344d917264bbb5ad17c40d2e3a33f217a7a94866
           path: sales-db
           persist-credentials: false
       - name: Migrate isolated MongoDB 7.0 and run required integration scenarios
