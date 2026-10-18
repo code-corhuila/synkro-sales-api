@@ -116,6 +116,16 @@ on): domain 100.00%, application 95.71%, infrastructure 88.30%, global 89.72%
 (minimums 90/80/60/80). The evidence gate now also requires nine `Reports/*` and five
 `HTTP/Reports*` scenarios to execute and pass.
 
+## Toolchain and vulnerability scanning
+
+The module and the container image build with Go 1.26.9 (`go.mod`,
+`deploy/Dockerfile`, `deploy/ci/mongo-integration.sh` and the CI workflow use the
+same patch release). Dependencies that carried reachable advisories are at
+`golang.org/x/net` v0.60.0 and `golang.org/x/text` v0.42.0 (their transitive
+requirements raise `x/crypto`, `x/sys` and `x/sync`). CI runs
+`govulncheck ./...` (v1.9.0); any reachable vulnerability fails the build. Run it
+locally with `go install golang.org/x/vuln/cmd/govulncheck@v1.9.0 && govulncheck ./...`.
+
 ## Running the tests
 
 ```bash
@@ -168,7 +178,7 @@ The launcher creates an exclusive Docker network and a uniquely named MongoDB 7.
 credentials, tmpfs storage and `com.synkro.sales-db.disposable=true`. It builds and
 runs that repository's pinned Liquibase runner with a read-only migration mount;
 preflight/postflight verify the actual validator, indexes and grants. A temporary
-Go 1.23 Linux container joins the same network, resolves the advertised replica
+Go 1.26.9 Linux container joins the same network, resolves the advertised replica
 hostname and runs all tests with race detection as `sales_app`. There are no public
 ports or persistent volumes. The integration suite verifies the writable primary,
 server version and authenticated principal before any permission probe.
