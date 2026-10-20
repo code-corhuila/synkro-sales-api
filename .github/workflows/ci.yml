@@ -1,0 +1,132 @@
+name: ci
+
+on:
+  push:
+    branches: [develop, qa, main]
+  pull_request:
+    branches: [develop, qa, main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-common-files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Sales DB launcher contract
+        run: |
+          python3 tests/test_owner_launcher.py
+          python3 tests/test_launcher_guards.py
+      - name: Verify common repository files exist
+        run: |
+          set -e
+          test -f README.md
+          test -f .gitignore
+          test -f .github/CODEOWNERS
+          test -f .github/pull_request_template.md
+          test -f .env.example
+          echo "Common files present."
+
+  build-test-and-architecture-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.9"
+      - name: Verify Go formatting across the repository
+        run: |
+          set -euo pipefail
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Go files require formatting:"
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Race detector
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          set -euo pipefail
+          command -v gcc
+          gcc --version
+          go test -race ./...
+      - name: Global coverage gate (minimum 80%)
+        env:
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          go test -coverprofile=coverage.out ./...
+          report=$(go tool cover -func=coverage.out)
+          echo "$report"
+          coverage=$(awk '/^total:/ {value = $NF; sub(/%$/, "", value); print value}' <<< "$report")
+          awk -v coverage="$coverage" 'BEGIN {
+            if (coverage !~ /^[0-9]+([.][0-9]+)?$/) {
+              print "Could not read global coverage"
+              exit 1
+            }
+            printf "Global coverage: %s%% (minimum: 80%%)\n", coverage
+            if (coverage + 0 < 80) {
+              print "Global coverage is below the required minimum"
+              exit 1
+            }
+          }'
+      - name: Architecture check — domain imports nothing but the standard library
+        run: |
+          set -e
+          violations=$(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./internal/domain/... | grep -v '^github.com/code-corhuila/synkro-sales-api' || true)
+          if [ -n "$violations" ]; then
+            echo "internal/domain imports outside the standard library:"
+            echo "$violations"
+            exit 1
+          fi
+          echo "Architecture check passed: domain has no external imports."
+
+  vulnerability-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.9"
+      - name: govulncheck (reachable vulnerabilities block the build)
+        run: |
+          set -euo pipefail
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
+
+  mongodb-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: sales-api
+      - name: Check out compatible approved Sales migrations
+        uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-sales-db
+          ref: 344d917264bbb5ad17c40d2e3a33f217a7a94866
+          path: sales-db
+          persist-credentials: false
+      - name: Migrate isolated MongoDB 7.0 and run required integration scenarios
+        working-directory: sales-api
+        run: bash deploy/ci/mongo-integration.sh ../sales-db
+      - name: Upload executed integration evidence and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mongodb-integration-evidence
+          path: sales-api/.integration-results/
+          include-hidden-files: true
+          if-no-files-found: error
