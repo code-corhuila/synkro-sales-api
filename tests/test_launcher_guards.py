@@ -49,7 +49,10 @@ class LauncherGuards(unittest.TestCase):
             fake.write_text('#!/usr/bin/env bash\necho "DOCKER-REACHED $*" >&2\nexit 42\n', newline='\n')
             fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
             prepare(database, fixture_commit)
-            env = dict(os.environ, PATH=bin_dir.as_posix() + os.pathsep + os.environ['PATH'])
+            # On Windows hide the native shim; on Linux keep shared tool directories such as /usr/bin.
+            kept = [p for p in os.environ['PATH'].split(os.pathsep)
+                    if os.name != 'nt' or not any((Path(p) / n).exists() for n in ('docker', 'docker.exe'))]
+            env = dict(os.environ, PATH=os.pathsep.join([bin_dir.as_posix(), *kept]))
             return subprocess.run([SHELL, str(api / 'deploy/ci/mongo-integration.sh'), str(database)],
                                   env=env, capture_output=True, text=True, timeout=60)
 
