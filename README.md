@@ -184,6 +184,17 @@ hostname and runs all tests with race detection as `sales_app`. There are no pub
 ports or persistent volumes. The integration suite verifies the writable primary,
 server version and authenticated principal before any permission probe.
 
+Before any database resource exists, the launcher fills a fresh, run-owned Docker
+volume with the module graph (`go mod download` and `go mod verify`, read-only source,
+default bridge, no database variables). The test and verifier containers mount that
+cache with `GOPROXY=off`, `GOTOOLCHAIN=local` and `GOFLAGS=-mod=readonly`, so modules
+are never downloaded during the run while the tests still reach Mongo on the run
+network. A preparation failure stops the run before the network or MongoDB exist.
+Cleanup removes the cache only when its label matches the run; an existing volume with
+that name is refused. Design and test IDs: `docs/design/offline-module-cache.md`.
+The fixture tests (`tests/test_module_cache_launcher.py`) use a fake Docker; they do
+not replace the real integration run above.
+
 `TEST_MONGODB_URI` is injected by this launcher. Ordinary `go test ./...` skips the
 real suite when it is absent. Mandatory runs also set `REQUIRE_MONGODB_INTEGRATION=1`
 and attest to the labelled tmpfs target with `TEST_MONGODB_DISPOSABLE=1` and
