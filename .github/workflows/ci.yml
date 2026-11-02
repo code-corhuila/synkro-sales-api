@@ -15,8 +15,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Sales DB launcher contract
+      - name: Verify root deployment contract
         run: |
+          python3 tests/test_root_deploy.py
+          python3 tests/test_reconciled_deployment.py
           python3 tests/test_owner_launcher.py
           python3 tests/test_launcher_guards.py
       - name: Verify common repository files exist
@@ -80,7 +82,7 @@ jobs:
               exit 1
             }
           }'
-      - name: Architecture check — domain imports nothing but the standard library
+      - name: Architecture check â€” domain imports nothing but the standard library
         run: |
           set -e
           violations=$(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./internal/domain/... | grep -v '^github.com/code-corhuila/synkro-sales-api' || true)
