@@ -28,6 +28,11 @@ export TEST_MONGODB_DISPOSABLE=1 REQUIRE_MONGODB_INTEGRATION=1 CGO_ENABLED=1
 runner="synkro-sales-api-it-migrate-$token"
 tester="synkro-sales-api-it-go-$token"
 image="synkro-sales-api-it-runner:$token"
+modcache="synkro-sales-api-it-modcache-$token"
+fetcher="synkro-sales-api-it-prefetch-$token"
+# Offline means no module downloads; the test container still reaches Mongo.
+offline_go=(-e GOMODCACHE=/gomodcache -e GOPROXY=off -e GOTOOLCHAIN=local -e GOFLAGS=-mod=readonly -v "$modcache:/gomodcache")
+cache_owned=0
 network_owned=0
 mongo_attempted=0
 image_attempted=0
@@ -38,29 +43,41 @@ export MSYS_NO_PATHCONV=1
 cleanup() {
   local exit_status=$? name
   trap - EXIT
-  for name in "$tester" "$runner"; do
+  for name in "$tester" "$fetcher" "$runner"; do
     if [[ $(docker container inspect --format '{{index .Config.Labels "com.synkro.sales-api.integration"}}' "$name" 2>/dev/null || true) == "$token" ]]; then
       docker rm -f "$name" >/dev/null || exit_status=1
     fi
   done
+  if [[ $cache_owned == 1 ]] && [[ $(docker volume inspect --format '{{index .Labels "com.synkro.sales-api.integration"}}' "$modcache" 2>/dev/null || true) == "$token" ]]; then
+    docker volume rm "$modcache" >/dev/null || exit_status=1
+  fi
   if [[ $mongo_attempted == 1 ]] && [[ $(docker container inspect --format '{{index .Config.Labels "com.synkro.sales-db.disposable"}}' "$CI_MONGO_CONTAINER" 2>/dev/null || true) == true ]]; then
     docker rm -f "$CI_MONGO_CONTAINER" >/dev/null || exit_status=1
   fi
   if [[ $network_owned == 1 ]]; then docker network rm "$MONGODB_NETWORK" >/dev/null || exit_status=1; fi
   if [[ $image_attempted == 1 ]] && docker image inspect "$image" >/dev/null 2>&1; then docker image rm "$image" >/dev/null || exit_status=1; fi
   # scratch is the exact directory returned by mktemp, never a computed project path.
-  rm -f "$scratch/migration.log" "$scratch/tests.json"
+  rm -f "$scratch/migration.log" "$scratch/prefetch.log" "$scratch/tests.json"
   rmdir "$scratch" || exit_status=1
   unset CI_ADMIN_PASSWORD CI_SALES_APP_PASSWORD MONGODB_URI TEST_MONGODB_URI
   echo "Disposable integration cleanup finished (exit $exit_status)"
   exit "$exit_status"
 }
 trap cleanup EXIT
-for name in "$CI_MONGO_CONTAINER" "$runner" "$tester"; do
+for name in "$CI_MONGO_CONTAINER" "$runner" "$tester" "$fetcher"; do
   if docker container inspect "$name" >/dev/null 2>&1; then echo "Refusing existing container: $name" >&2; exit 1; fi
 done
 if docker network inspect "$MONGODB_NETWORK" >/dev/null 2>&1; then echo 'Refusing existing network' >&2; exit 1; fi
 if docker image inspect "$image" >/dev/null 2>&1; then echo 'Refusing existing runner image tag' >&2; exit 1; fi
+if docker volume inspect "$modcache" >/dev/null 2>&1; then echo 'Refusing existing module cache volume' >&2; exit 1; fi
+# Fill a fresh run-owned module cache on the default bridge before any database resource exists.
+# The source is read-only and the preparer gets no database, password or service variables.
+docker volume create --label "com.synkro.sales-api.integration=$token" "$modcache" >/dev/null
+cache_owned=1
+docker run --rm --name "$fetcher" --label "com.synkro.sales-api.integration=$token" \
+  -e GOMODCACHE=/gomodcache -e GOTOOLCHAIN=local -e GOFLAGS=-mod=readonly -v "$modcache:/gomodcache" \
+  -v "$(host_path "$api_dir"):/workspace:ro" -w /workspace golang:1.26.9 bash -euo pipefail -c 'go mod download && go mod verify' \
+  >"$scratch/prefetch.log" 2>&1 || { echo 'Module cache preparation failed; integration did not start' >&2; exit 1; }
 docker network create --label "com.synkro.sales-api.integration=$token" "$MONGODB_NETWORK" >/dev/null
 network_owned=1
 mongo_attempted=1
@@ -85,7 +102,7 @@ sed -e "s/$CI_ADMIN_PASSWORD/[REDACTED]/g" -e "s/$CI_SALES_APP_PASSWORD/[REDACTE
 [[ $status == 0 ]] || exit "$status"
 mkdir -p "$api_dir/.integration-results"
 docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$token" --network "$MONGODB_NETWORK" \
-  -e TEST_MONGODB_URI -e TEST_MONGO_HOST -e TEST_MONGODB_DISPOSABLE -e REQUIRE_MONGODB_INTEGRATION -e CGO_ENABLED \
+  -e TEST_MONGODB_URI -e TEST_MONGO_HOST -e TEST_MONGODB_DISPOSABLE -e REQUIRE_MONGODB_INTEGRATION -e CGO_ENABLED "${offline_go[@]}" \
   -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.26.9 bash -euo pipefail -c '
     getent hosts "$TEST_MONGO_HOST"
     go version
@@ -93,5 +110,5 @@ docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$toke
     go test -count=1 -race -coverprofile=.integration-results/coverage.out -json ./... > .integration-results/tests.json
   ' || { cat "$api_dir/.integration-results/tests.json"; exit 1; }
 # Evidence gate: a skipped or absent required scenario must fail the job.
-docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$token" \
+docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$token" "${offline_go[@]}" \
   -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.26.9 go run deploy/ci/verify-integration.go
