@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -86,7 +87,7 @@ func TestMongoIntegration(t *testing.T) {
 		t.Fatalf("MongoDB version=%s, want 7.0", build.Version)
 	}
 	collection := client.Database("sales").Collection("sale")
-	repo := NewMongoRepository(collection)
+	repo := NewMongoRepository(collection, client.Database("sales").Collection("sale_counter"))
 	t.Run("HTTP", func(t *testing.T) { runHTTPIntegration(t, client) })
 	t.Run("Reports", func(t *testing.T) { runReportIntegration(t, client) })
 	newKey := func() string { return uuid.NewString() + ":register-sale" }
@@ -185,6 +186,88 @@ func TestMongoIntegration(t *testing.T) {
 		countOne(t, key)
 		t.Log("32 operations returned one original sale; exactly one creation and one document")
 	})
+	t.Run("CommercialNumberConcurrency", func(t *testing.T) {
+		const n = 32
+		type outcome struct {
+			sale *model.Sale
+			err  error
+		}
+		results := make(chan outcome, n)
+		start := make(chan struct{})
+		for i := 0; i < n; i++ {
+			go func(s *model.Sale, key string) {
+				<-start
+				got, created, err := repo.CreateOnce(ctx, key, s)
+				if err == nil && !created {
+					err = errors.New("distinct key reported as replay")
+				}
+				results <- outcome{got, err}
+			}(saleFixture(t, 1), newKey())
+		}
+		close(start)
+		seen := map[string]bool{}
+		for i := 0; i < n; i++ {
+			got := <-results
+			if got.err != nil {
+				t.Fatalf("concurrent registration failed: %v", got.err)
+			}
+			number := got.sale.CommercialNumber()
+			if !model.ValidCommercialNumber(number) || seen[number] {
+				t.Fatalf("number %q is invalid or repeated", number)
+			}
+			seen[number] = true
+		}
+		t.Logf("%d concurrent distinct sales received %d distinct commercial numbers", n, len(seen))
+	})
+	t.Run("CommercialNumberReplay", func(t *testing.T) {
+		key := newKey()
+		first, created, err := repo.CreateOnce(ctx, key, saleFixture(t, 1))
+		if err != nil || !created || first.CommercialNumber() == "" {
+			t.Fatalf("first: created=%v number=%q err=%v", created, first.CommercialNumber(), err)
+		}
+		var counterBefore struct {
+			Seq int64 `bson:"seq"`
+		}
+		counters := client.Database("sales").Collection("sale_counter")
+		year := fmt.Sprintf("VEN-%04d", model.CommercialYear(first.Date()))
+		if err := counters.FindOne(ctx, bson.M{"_id": year}).Decode(&counterBefore); err != nil {
+			t.Fatal(err)
+		}
+		again, created, err := repo.CreateOnce(ctx, key, saleFixture(t, 2))
+		if err != nil || created {
+			t.Fatalf("replay: created=%v err=%v", created, err)
+		}
+		if again.CommercialNumber() != first.CommercialNumber() || again.ID() != first.ID() {
+			t.Fatalf("replay changed the sale: %q vs %q", again.CommercialNumber(), first.CommercialNumber())
+		}
+		var counterAfter struct {
+			Seq int64 `bson:"seq"`
+		}
+		if err := counters.FindOne(ctx, bson.M{"_id": year}).Decode(&counterAfter); err != nil {
+			t.Fatal(err)
+		}
+		if counterAfter.Seq != counterBefore.Seq {
+			t.Fatalf("a replay consumed a number: %d -> %d", counterBefore.Seq, counterAfter.Seq)
+		}
+	})
+	t.Run("CommercialNumberExhaustion", func(t *testing.T) {
+		counters := client.Database("sales").Collection("sale_counter")
+		if _, err := counters.UpdateOne(ctx, bson.M{"_id": "VEN-2099"}, bson.M{"$set": bson.M{"seq": int64(999999)}}, options.UpdateOne().SetUpsert(true)); err != nil {
+			t.Fatal(err)
+		}
+		late, err := model.RegisterSale(uuid.NewString(), uuid.NewString(), uuid.NewString(), time.Date(2099, 6, 1, 12, 0, 0, 0, time.UTC),
+			[]model.LineInput{{DetailID: uuid.NewString(), ProductID: uuid.NewString(), Quantity: 1, UnitPriceCents: 100}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		key := newKey()
+		if _, _, err := repo.CreateOnce(ctx, key, late); !errors.Is(err, model.ErrCommercialSequenceExhausted) {
+			t.Fatalf("exhaustion must be an explicit error, got %v", err)
+		}
+		if count, err := collection.CountDocuments(ctx, bson.M{"idempotencyKey": key}); err != nil || count != 0 {
+			t.Fatalf("a sale without a number was stored: count=%d err=%v", count, err)
+		}
+	})
 	t.Run("ValidatorRejection", func(t *testing.T) {
 		cases := map[string]func(bson.M){
 			"UndeclaredField": func(d bson.M) { d["status"] = "PAID" },
@@ -271,7 +354,7 @@ func TestMongoIntegration(t *testing.T) {
 		bad := *u
 		bad.User = url.UserPassword("sales_app", uuid.NewString())
 		invalid := integrationClient(t, bad.String())
-		got, created, err := NewMongoRepository(invalid.Database("sales").Collection("sale")).CreateOnce(ctx, newKey(), saleFixture(t, 1))
+		got, created, err := NewMongoRepository(invalid.Database("sales").Collection("sale"), invalid.Database("sales").Collection("sale_counter")).CreateOnce(ctx, newKey(), saleFixture(t, 1))
 		if err == nil || got != nil || created {
 			t.Fatal("invalid credentials reported success")
 		}
@@ -282,7 +365,7 @@ func TestMongoIntegration(t *testing.T) {
 	})
 	t.Run("UnavailableServer", func(t *testing.T) {
 		unavailable := integrationClient(t, "mongodb://127.0.0.1:1/sales?directConnection=true")
-		got, created, err := NewMongoRepository(unavailable.Database("sales").Collection("sale")).CreateOnce(ctx, newKey(), saleFixture(t, 1))
+		got, created, err := NewMongoRepository(unavailable.Database("sales").Collection("sale"), unavailable.Database("sales").Collection("sale_counter")).CreateOnce(ctx, newKey(), saleFixture(t, 1))
 		if err == nil || got != nil || created {
 			t.Fatal("unavailable server reported success")
 		}

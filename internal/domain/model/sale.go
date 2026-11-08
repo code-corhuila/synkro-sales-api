@@ -35,6 +35,9 @@ type Sale struct {
 	totalCents int64
 	active     bool
 	details    []SaleDetail
+
+	// commercialNumber is empty until the persistence boundary assigns it.
+	commercialNumber string
 }
 
 func (s *Sale) ID() string         { return s.id }

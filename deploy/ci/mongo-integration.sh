@@ -7,7 +7,7 @@ if command -v cygpath >/dev/null && command -v docker.exe >/dev/null; then
   docker() { command docker.exe "$@"; }
   export -f docker
 fi
-DB_REF=344d917264bbb5ad17c40d2e3a33f217a7a94866
+DB_REF=e00e0d3fd27cc012e25d8d4d82a41f3449b7ca72
 api_dir=$(cd "$(dirname "$0")/../.." && pwd)
 db_dir=$(cd "${1:?usage: bash deploy/ci/mongo-integration.sh /path/to/synkro-sales-db}" && pwd)
 [[ $(git -C "$db_dir" rev-parse HEAD) == "$DB_REF" ]] || { echo 'Sales DB checkout does not match the approved pinned revision' >&2; exit 1; }
