@@ -53,7 +53,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		t.Fatal(err)
 	}
 	collection := client.Database("sales").Collection("sale")
-	repo := NewMongoRepository(collection)
+	repo := NewMongoRepository(collection, client.Database("sales").Collection("sale_counter"))
 	dependencies := func(client *mongo.Client, repo *MongoRepository) httpapi.Dependencies {
 		return httpapi.Dependencies{Register: usecase.NewRegisterSale(repo, integrationIDs{}, clock), Queries: usecase.NewSalesQueries(repo), Reports: usecase.NewSalesReports(repo), Verifier: verifier, Health: func(ctx context.Context) error { return client.Ping(ctx, nil) }, Clock: clock, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)), Timeout: 2 * time.Second}
 	}
@@ -244,7 +244,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 	})
 	t.Run("DatabaseFailure", func(t *testing.T) {
 		unavailable := integrationClient(t, "mongodb://127.0.0.1:1/sales?directConnection=true")
-		broken := httpapi.NewRouter(dependencies(unavailable, NewMongoRepository(unavailable.Database("sales").Collection("sale"))))
+		broken := httpapi.NewRouter(dependencies(unavailable, NewMongoRepository(unavailable.Database("sales").Collection("sale"), unavailable.Database("sales").Collection("sale_counter"))))
 		for _, path := range []string{"/api/v1/sales", "/api/v1/sales/" + original.SaleID} {
 			w := request(broken, "GET", path, "", owner, "ADMIN", "sales:read")
 			if w.Code != 500 || strings.Contains(w.Body.String(), "127.0.0.1") {
@@ -262,7 +262,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 	})
 	runReportHTTPIntegration(t, collection, router, request, func() http.Handler {
 		unavailable := integrationClient(t, "mongodb://127.0.0.1:1/sales?directConnection=true")
-		return httpapi.NewRouter(dependencies(unavailable, NewMongoRepository(unavailable.Database("sales").Collection("sale"))))
+		return httpapi.NewRouter(dependencies(unavailable, NewMongoRepository(unavailable.Database("sales").Collection("sale"), unavailable.Database("sales").Collection("sale_counter"))))
 	})
 	t.Run("NoDeletePermission", func(t *testing.T) {
 		_, err := collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: original.SaleID}})

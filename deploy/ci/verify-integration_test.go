@@ -28,7 +28,7 @@ func evidenceFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	var events strings.Builder
-	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
+	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "CommercialNumberConcurrency", "CommercialNumberReplay", "CommercialNumberExhaustion", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
 		event, _ := json.Marshal(map[string]string{"Action": "pass", "Test": "TestMongoIntegration/" + name})
 		events.Write(event)
 		events.WriteByte('\n')
