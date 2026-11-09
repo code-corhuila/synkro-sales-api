@@ -49,13 +49,32 @@ func TestSaleResponseOmitsCommercialNumberForSalesWithoutOne(t *testing.T) {
 	}
 }
 
-// Running out of numbers for the year is an operator problem, not a client mistake: it is reported
-// like any other unexpected failure, with a trace id and no internal detail.
-func TestYearlySequenceExhaustionIsAnOpaqueServerError(t *testing.T) {
+// Running out of numbers for the year is a business rejection, not an unexpected failure: the closed error
+// catalog (07-api/guidelines.md) has no other code for it, 409 is not used, 503 is the Gateway's, and the Workflow
+// only treats 400/422 with a valid envelope as proof that the registration did not commit (ADR-015) - a 500
+// would leave the stock reservation in place.
+func TestYearlySequenceExhaustionIsAnIdentifiableBusinessRuleRejection(t *testing.T) {
 	for _, err := range []error{model.ErrCommercialSequenceExhausted, fmt.Errorf("register: %w", model.ErrCommercialSequenceExhausted)} {
 		status, code, message, details := statusFor(err)
-		if status != 500 || code != "INTERNAL_ERROR" || message != "Unexpected error" || details != nil {
+		if status != 422 || code != "BUSINESS_RULE_VIOLATION" || message != "The yearly commercial number sequence is exhausted" ||
+			len(details) != 1 || details[0].Field != "commercialNumber" || details[0].Message != "yearly sequence exhausted" {
 			t.Fatalf("exhaustion mapped to %d %s %q %v", status, code, message, details)
+		}
+	}
+}
+
+func TestRegistrationAtTheYearlyCeilingAnswersAnEnvelopeThatLeaksNothing(t *testing.T) {
+	f := newHTTPFixture(t)
+	f.repo.failure = fmt.Errorf("secret-database: %w", model.ErrCommercialSequenceExhausted)
+	w := f.request(t, "POST", "/api/v1/sales", requestBody, "synkro-workflow", "SERVICE", "sales:register")
+	assertHTTPError(t, w, 422, "BUSINESS_RULE_VIOLATION")
+	var body errorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.TraceID == "" || len(body.Details) != 1 {
+		t.Fatalf("envelope: %s %v", w.Body.String(), err)
+	}
+	for _, internal := range []string{"sale_counter", "VEN-", "mongo", "secret-database"} {
+		if strings.Contains(strings.ToLower(w.Body.String()), strings.ToLower(internal)) {
+			t.Fatalf("internal detail %q leaked: %s", internal, w.Body.String())
 		}
 	}
 }
