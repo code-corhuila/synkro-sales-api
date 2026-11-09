@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -45,5 +46,16 @@ func TestSaleResponseOmitsCommercialNumberForSalesWithoutOne(t *testing.T) {
 	}
 	if strings.Contains(string(raw), "commercialNumber") {
 		t.Fatalf("a missing number must be absent, never fabricated or null: %s", raw)
+	}
+}
+
+// Running out of numbers for the year is an operator problem, not a client mistake: it is reported
+// like any other unexpected failure, with a trace id and no internal detail.
+func TestYearlySequenceExhaustionIsAnOpaqueServerError(t *testing.T) {
+	for _, err := range []error{model.ErrCommercialSequenceExhausted, fmt.Errorf("register: %w", model.ErrCommercialSequenceExhausted)} {
+		status, code, message, details := statusFor(err)
+		if status != 500 || code != "INTERNAL_ERROR" || message != "Unexpected error" || details != nil {
+			t.Fatalf("exhaustion mapped to %d %s %q %v", status, code, message, details)
+		}
 	}
 }

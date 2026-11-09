@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -79,5 +80,45 @@ func TestSaleAssignsCommercialNumberOnlyOnce(t *testing.T) {
 	}
 	if s.CommercialNumber() != "VEN-2026-000007" {
 		t.Fatalf("number changed: %s", s.CommercialNumber())
+	}
+}
+
+func TestCommercialYearAtTheExactBoundary(t *testing.T) {
+	cot := time.FixedZone("COT", -5*60*60)
+	cases := []struct {
+		name string
+		at   time.Time
+		want int
+	}{
+		{"last nanosecond of 2026 in Colombia", time.Date(2026, 12, 31, 23, 59, 59, 999999999, cot), 2026},
+		{"first instant of 2027 in Colombia", time.Date(2027, 1, 1, 0, 0, 0, 0, cot), 2027},
+		{"04:59:59.999999999 UTC is still the old year", time.Date(2027, 1, 1, 4, 59, 59, 999999999, time.UTC), 2026},
+		{"05:00:00 UTC is the new year", time.Date(2027, 1, 1, 5, 0, 0, 0, time.UTC), 2027},
+		{"an instant expressed in another zone", time.Date(2027, 1, 1, 10, 0, 0, 0, time.FixedZone("CET", 3600)), 2027},
+		{"leap day", time.Date(2028, 2, 29, 23, 0, 0, 0, cot), 2028},
+	}
+	for _, c := range cases {
+		if got := CommercialYear(c.at); got != c.want {
+			t.Errorf("%s: year = %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+func TestEveryYearStartsAtSequenceOne(t *testing.T) {
+	for year := 2026; year <= 2031; year++ {
+		got, err := NewCommercialNumber(year, 1)
+		want := fmt.Sprintf("VEN-%d-000001", year)
+		if err != nil || got != want {
+			t.Fatalf("first number of %d = %q,%v want %q", year, got, err, want)
+		}
+	}
+}
+
+func TestTheLastNumberOfTheYearIsIssuedAndTheNextOneFails(t *testing.T) {
+	if got, err := NewCommercialNumber(2026, 999999); err != nil || got != "VEN-2026-999999" {
+		t.Fatalf("999999 must still be issued: %q,%v", got, err)
+	}
+	if got, err := NewCommercialNumber(2026, 1000000); !errors.Is(err, ErrCommercialSequenceExhausted) || got != "" {
+		t.Fatalf("1000000 must fail with no number: %q,%v", got, err)
 	}
 }
