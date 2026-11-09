@@ -109,6 +109,43 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 			t.Fatal("replay inserted another document", err)
 		}
 	})
+	t.Run("RegistrationAtTheYearlyCeiling", func(t *testing.T) {
+		// Real database, real use case and HTTP adapter: the year 2097 has no numbers left.
+		if _, err := client.Database("sales").Collection("sale_counter").InsertOne(ctx, bson.M{"_id": "VEN-2097", "seq": int64(999999)}); err != nil {
+			t.Fatal(err)
+		}
+		late := dependencies(client, repo)
+		late.Register = usecase.NewRegisterSale(repo, integrationIDs{}, integrationClock{time.Date(2097, 6, 1, 12, 0, 0, 0, time.UTC)})
+		key := uuid.NewString() + ":register-sale"
+		r := httptest.NewRequest("POST", "/api/v1/sales", strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+token("synkro-workflow", "SERVICE", "sales:register"))
+		r.Header.Set("Idempotency-Key", key)
+		r.Header.Set("X-Correlation-Id", "mongo-http-trace")
+		w := httptest.NewRecorder()
+		httpapi.NewRouter(late).ServeHTTP(w, r)
+		var envelope struct {
+			Error   string `json:"error"`
+			Message string `json:"message"`
+			TraceID string `json:"traceId"`
+			Details []struct {
+				Field   string `json:"field"`
+				Message string `json:"message"`
+			} `json:"details"`
+		}
+		if w.Code != 422 || json.Unmarshal(w.Body.Bytes(), &envelope) != nil || envelope.Error != "BUSINESS_RULE_VIOLATION" || envelope.TraceID != "mongo-http-trace" ||
+			len(envelope.Details) != 1 || envelope.Details[0].Field != "commercialNumber" {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		// The status and code the Workflow accepts as proof that nothing was committed (ADR-015), and nothing internal leaks.
+		for _, internal := range []string{"sale_counter", "VEN-2097", "mongodb", "999999"} {
+			if strings.Contains(w.Body.String(), internal) {
+				t.Fatalf("internal detail %q leaked: %s", internal, w.Body.String())
+			}
+		}
+		if count, err := collection.CountDocuments(ctx, bson.D{{Key: "idempotencyKey", Value: key}}); err != nil || count != 0 {
+			t.Fatalf("a partial sale was stored: count=%d err=%v", count, err)
+		}
+	})
 	t.Run("AdminListAndDetail", func(t *testing.T) {
 		w := request(router, "GET", "/api/v1/sales?customerId="+customer, "", owner, "ADMIN", "sales:read")
 		var list httpapi.ListSalesResponse
