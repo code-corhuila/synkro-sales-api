@@ -7,6 +7,7 @@ the launcher's real behavior. The real integration run remains a separate,
 mandatory step. Test IDs are described in docs/design/offline-module-cache.md.
 """
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -125,7 +126,7 @@ class ModuleCacheLauncher(unittest.TestCase):
             git(database, 'add', '-A')
             git(database, 'commit', '-q', '-m', 'fixture')
             commit = git(database, 'rev-parse', 'HEAD')
-            script = LAUNCHER.read_text().replace('DB_REF=344d917264bbb5ad17c40d2e3a33f217a7a94866', 'DB_REF=' + commit)
+            script = re.sub(r'^DB_REF=.*$', 'DB_REF=' + commit, LAUNCHER.read_text(), flags=re.M)
             write_lf(api / 'deploy/ci/mongo-integration.sh', script)
             write_lf(bin_dir / 'docker', FAKE_DOCKER, executable=True)
             write_lf(base / 'fake-env.sh', FAKE_OPENSSL)

@@ -15,8 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / 'deploy/ci/mongo-integration.sh'
 WORKFLOW = ROOT / '.github/workflows/ci.yml'
-# synkro-sales-db tag v2.0.0 (annotated tag object 5bbad89) resolves to this commit.
-SALES_DB_V2_COMMIT = '344d917264bbb5ad17c40d2e3a33f217a7a94866'
+# Sales DB revision that the qa promotion of HU-VEN-20 (yearly commercial number) is verified against.
+SALES_DB_V2_COMMIT = 'e3ef534d1c205db78f74cfe70e53f7086ac4d1b5'
 SHELL = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else 'bash'
 
 
