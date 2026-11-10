@@ -52,7 +52,7 @@ func runReportIntegration(t *testing.T, client *mongo.Client) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	collection := client.Database("sales").Collection("sale")
-	repo := NewMongoRepository(collection)
+	repo := NewMongoRepository(collection, client.Database("sales").Collection("sale_counter"))
 	filter := func(from, until time.Time, owner string, pageNo, limit int64) out.ReportFilter {
 		return out.ReportFilter{CreatedBy: owner, From: &from, Until: &until, Page: pageNo, Limit: limit}
 	}
@@ -333,7 +333,7 @@ func runReportIntegration(t *testing.T, client *mongo.Client) {
 		same(t, got, []groupTotal{{utc(2040, 2, 1, 0, 0, 0, 0), math.MaxInt64, 1}})
 	})
 	t.Run("DatabaseFailureAndCancellation", func(t *testing.T) {
-		unavailable := NewMongoRepository(integrationClient(t, "mongodb://127.0.0.1:1/sales?directConnection=true").Database("sales").Collection("sale"))
+		unavailable := NewMongoRepository(integrationClient(t, "mongodb://127.0.0.1:1/sales?directConnection=true").Database("sales").Collection("sale"), nil)
 		f := filter(utc(2031, 1, 1, 0, 0, 0, 0), utc(2032, 1, 1, 0, 0, 0, 0), "", 1, 20)
 		if _, err := unavailable.DailyTotals(ctx, f); err == nil {
 			t.Fatal("daily masked an unavailable database")

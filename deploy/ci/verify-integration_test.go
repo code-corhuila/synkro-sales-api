@@ -28,12 +28,12 @@ func evidenceFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	var events strings.Builder
-	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
+	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "CommercialNumberConcurrency", "CommercialNumberReplay", "CommercialNumberExhaustion", "CommercialNumberYearRollover", "CommercialNumberSameKeyConcurrent", "CommercialNumberGapWhenInsertFails", "CommercialNumberExhaustionLeavesNoPartialSale", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
 		event, _ := json.Marshal(map[string]string{"Action": "pass", "Test": "TestMongoIntegration/" + name})
 		events.Write(event)
 		events.WriteByte('\n')
 	}
-	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission", "ReportsAdminAndSalesperson", "ReportsAccessControl", "ReportsPaginationAndMeta", "ReportsFiltersAndRouting", "ReportsDatabaseFailure"} {
+	for _, name := range []string{"FirstRegistration", "Replay", "RegistrationAtTheYearlyCeiling", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission", "ReportsAdminAndSalesperson", "ReportsAccessControl", "ReportsPaginationAndMeta", "ReportsFiltersAndRouting", "ReportsDatabaseFailure"} {
 		event, _ := json.Marshal(map[string]string{"Action": "pass", "Test": "TestMongoIntegration/HTTP/" + name})
 		events.Write(event)
 		events.WriteByte('\n')
