@@ -10,3 +10,4 @@
 .vscode/
 .DS_Store
 /.integration-results/
+/.contract-results/
