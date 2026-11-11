@@ -1,0 +1,13 @@
+{
+  "encoding": "UTF-8 with LF",
+  "contracts": [
+    {
+      "repository": "code-corhuila/synkro-sales-portal",
+      "revision": "374a65263912573b08c9fba6f9e6bd8aa8c16c53",
+      "path": "tests/pact/pacts/SalesPortal-SalesAPI.json",
+      "file": "SalesPortal-SalesAPI.json",
+      "sha256": "b4f057b9de68f3bebe73ebbb247b1b0ecc23abcefaa2c4c5a320a2390ec9b52b",
+      "interactions": 2
+    }
+  ]
+}
