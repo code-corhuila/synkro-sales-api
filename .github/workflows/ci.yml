@@ -144,7 +144,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-sales-db
-          ref: 70c2c5d603e0083566918144f5f0b63ad4108d7a
+          ref: c6bacecc0f7c8743cf03c0a39f2fc7455db8c536
           path: sales-db
           persist-credentials: false
       - name: Check out the pinned OpenAPI contract
