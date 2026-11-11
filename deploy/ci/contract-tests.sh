@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tier 3 contract tests (11-quality/testing-strategy.md): the real Sales API, started against a disposable MongoDB that
 # carries the pinned Sales DB migrations, is exercised by Schemathesis against the OpenAPI contract published in
-# synkro-docs (07-api/contracts/openapi/synkro-sales-api.yaml). This is OpenAPI conformance, NOT consumer-driven Pact.
+# synkro-docs (07-api/contracts/openapi/synkro-sales-api.yaml). A separate consumer-generated Pact is verified first.
 #
 #   bash deploy/ci/contract-tests.sh /path/to/synkro-sales-db /path/to/synkro-docs
 #
@@ -42,6 +42,7 @@ migrate_image="synkro-sales-api-ct-migrate-image:$token"
 api_image="synkro-sales-api-ct-api-image:$token"
 runner="synkro-sales-api-ct-migrate-$token"
 api="synkro-sales-api-ct-api-$token"
+pact_runner="synkro-sales-api-ct-pact-$token"
 label="com.synkro.sales-api.contract=$token"
 scratch=$(mktemp -d)
 host_path() { if command -v cygpath >/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
@@ -54,7 +55,7 @@ images=()
 cleanup() {
   local exit_status=$? name image
   trap - EXIT
-  for name in "$api" "$runner"; do
+  for name in "$api" "$runner" "$pact_runner"; do
     if [[ $(docker container inspect --format '{{index .Config.Labels "com.synkro.sales-api.contract"}}' "$name" 2>/dev/null || true) == "$token" ]]; then
       docker rm -f "$name" >/dev/null || exit_status=1
     fi
@@ -140,6 +141,13 @@ mint() {  # role subject permissions-json
 ADMIN_TOKEN=$(mint ADMIN 00000000-0000-4000-8000-000000000001 '["sales:read","reports:read"]')
 SERVICE_TOKEN=$(mint SERVICE synkro-workflow '["sales:register"]')
 export ADMIN_TOKEN SERVICE_TOKEN
+# Consumer-driven verification is separate from OpenAPI conformance. All state is in this run's own database.
+(cd "$db_dir" && require_disposable_database)
+docker exec -i -e CI_ADMIN_PASSWORD "$CI_MONGO_CONTAINER" mongosh --quiet <"$api_dir/deploy/ci/pact/legacy.js" >"$scratch/pact-seed.log" 2>&1 || { echo 'Disposable Pact legacy fixture failed' >&2; exit 1; }
+docker run --rm --name "$pact_runner" --label "$label" --network "$MONGODB_NETWORK" -e ADMIN_TOKEN -e SERVICE_TOKEN \
+  -v "$(host_path "$api_dir/deploy/ci/pact"):/input:ro" -w /pact node:22-bookworm-slim sh -c \
+  'apt-get update -qq && apt-get install -y --no-install-recommends ca-certificates && cp -R /input/. /pact/ && npm ci && node verify.mjs' 2>&1 \
+  | sed -e "s/$SERVICE_TOKEN/[REDACTED]/g" -e "s/$ADMIN_TOKEN/[REDACTED]/g" | tee "$api_dir/.contract-results/pact-provider.log"
 CHECKS=status_code_conformance,response_schema_conformance,content_type_conformance,response_headers_conformance
 # Run 1: the service token registers sales (POST); run 2: an ADMIN reads them (GET list, detail, reports).
 cat >"$scratch/post.sh" <<EOF
