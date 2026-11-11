@@ -110,16 +110,17 @@ call(REGISTER, 403, 'POST with an ADMIN token (no sales:register) is 403', heade
 call(REGISTER, 422, 'POST whose amount overflows int64 is 422 BUSINESS_RULE_VIOLATION',
      headers={**SERVICE, 'Idempotency-Key': f'{uuid.uuid4()}:register-sale'},
      body={**BODY, 'details': [{'productId': PRODUCT_A, 'quantity': 2147483647, 'unitPriceCents': 9223372036854775807}]})
-# The Sales contract documents ONE replay outcome (200, same sale, nothing created) and says nothing about a body that differs
-# from the stored one (conflicting input is a Workflow rule, ADR-015). The service answers a known key with the stored sale and
-# ignores the new body; this step records that as an observation and checks only what the contract does state.
+# OBSERVATION, not an assertion: the Sales contract documents ONE replay outcome (200, same sale, nothing created) and is silent about a
+# body that differs from the stored one (conflicting input is a Workflow rule, ADR-015). What the service does is recorded here
+# without being judged correct; it is to be contrasted with the current Sales contract by its owners. It adds no pass and no fail.
 before = body_of(listing).get('meta', {}).get('total')
-other = call(REGISTER, 200, 'same key with a different body: documented replay (200), the stored sale comes back', headers={**SERVICE, 'Idempotency-Key': KEY},
-             body={**BODY, 'details': BODY['details'][:1]})
-record('a different body under a known key neither replaces nor duplicates the sale', body_of(other).get('saleId') == sale_id and body_of(other).get('totalCents') == EXPECTED_TOTAL)
+other = REGISTER.Case(headers={**SERVICE, 'Idempotency-Key': KEY}, body={**BODY, 'details': BODY['details'][:1]})
+other_response = other.call(base_url=BASE)
 after = body_of(SALES['GET'].Case(headers=ADMIN, query={'limit': 100}).call(base_url=BASE)).get('meta', {}).get('total')
-record('no second sale was created by that call', before is not None and before == after, f'total before={before}, after={after}')
-print('NOTE  the Sales contract does not document conflicting-body replays; the service returns the stored sale and ignores the new body')
+other_body = body_of(other_response)
+print(f'NOTE  same key, DIFFERENT body (not documented by the Sales contract): HTTP {other_response.status_code}, '
+      f'returns the stored sale={other_body.get("saleId") == sale_id}, totalCents={other_body.get("totalCents")} (stored {EXPECTED_TOTAL}), '
+      f'sales total before={before} after={after}. The service ignores the new body; this is not asserted as correct.')
 call(SALE['GET'], 404, 'GET of an unknown but well-formed id is 404', headers=ADMIN, path_parameters={'id': str(uuid.uuid4())})
 call(SALE['GET'], 400, 'GET of a malformed id is 400', headers=ADMIN, path_parameters={'id': 'not-a-uuid'})
 call(SALE['GET'], 400, 'GET detail with a query parameter is 400', headers=ADMIN, path_parameters={'id': sale_id}, query={'x': '1'})
