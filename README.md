@@ -282,3 +282,23 @@ included service uses that input. The standalone binary still supports either so
 and operator overrides. The required real MongoDB CI suite uses the published secure
 Sales DB revision `70c2c5d603e0083566918144f5f0b63ad4108d7a`; no migration guard or
 HTTP, architecture, race, unit or coverage check is removed.
+
+### Contract tests (Tier 3 of `11-quality/testing-strategy.md`)
+
+The `qa` policy (`00-governance/git-conventions.md`, `branching-policy.md`) requires "contract tests (Pact)" as a status
+check. The project's own testing strategy defines the contract tier as **OpenAPI conformance run by Schemathesis against the
+running service** on every PR. `deploy/ci/contract-tests.sh` implements exactly that for this service; it is **not**
+consumer-driven Pact and must not be reported as such.
+
+```bash
+bash deploy/ci/contract-tests.sh ../synkro-sales-db ../synkro-docs
+```
+
+It builds this checkout, starts it against a disposable MongoDB 7.0 carrying the pinned Sales DB migrations (same pin as the
+real-MongoDB launcher, read from `deploy/ci/mongo-integration.sh`), mints throwaway RS256 tokens (a SERVICE token with
+`sales:register` for `POST`, an ADMIN token for `GET`), and runs Schemathesis 4.33.2 (image pinned by digest) against the
+contract at the pinned `synkro-docs` revision (`DOCS_REF`) with the checks `status_code_conformance`,
+`response_schema_conformance`, `content_type_conformance` and `response_headers_conformance`. `/health` is checked directly
+because the contract documents it without the `/api/v1` prefix. Changing the contract means changing `DOCS_REF` (and the CI
+ref) in the same PR; the Python guard tests keep both equal. Reports are written to `.contract-results/` (ignored by Git).
+What it does not do: business rules (unit tests), database state (integration tests), consumer expectations (Pact).

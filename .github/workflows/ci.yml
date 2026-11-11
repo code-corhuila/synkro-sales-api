@@ -132,3 +132,36 @@ jobs:
           path: sales-api/.integration-results/
           include-hidden-files: true
           if-no-files-found: error
+
+  contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: sales-api
+      - name: Check out compatible approved Sales migrations
+        uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-sales-db
+          ref: 70c2c5d603e0083566918144f5f0b63ad4108d7a
+          path: sales-db
+          persist-credentials: false
+      - name: Check out the pinned OpenAPI contract
+        uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-docs
+          ref: 66d44ff8fa879adfc3c59388befc40f9d2d86afd
+          path: synkro-docs
+          persist-credentials: false
+      - name: Run Schemathesis against the real Sales API (Tier 3 contract tests)
+        working-directory: sales-api
+        run: bash deploy/ci/contract-tests.sh ../sales-db ../synkro-docs
+      - name: Upload contract-test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-evidence
+          path: sales-api/.contract-results/
+          include-hidden-files: true
+          if-no-files-found: error
