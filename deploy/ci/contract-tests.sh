@@ -16,7 +16,7 @@ api_dir=$(cd "$(dirname "$0")/../.." && pwd)
 DB_REF=$(sed -n 's/^DB_REF=\([0-9a-f]\{40\}\)$/\1/p' "$api_dir/deploy/ci/mongo-integration.sh")
 [[ -n $DB_REF ]] || { echo 'DB_REF not found in deploy/ci/mongo-integration.sh' >&2; exit 1; }
 # The contract revision this code is verified against. Changing the contract means changing this pin in the same PR.
-DOCS_REF=66d44ff8fa879adfc3c59388befc40f9d2d86afd
+DOCS_REF=921e69b4a742afd36f5d1cd43e10544a42137e87
 # Schemathesis 4.33.2, pinned by digest.
 SCHEMATHESIS_IMAGE=schemathesis/schemathesis@sha256:2cd2605142dfcaff1e332f1b73b6faed0f7c33dba3dfa72e1799428be984d258
 SPEC_REL=07-api/contracts/openapi
