@@ -1,0 +1,268 @@
+{
+  "consumer": {
+    "name": "SalesPortal"
+  },
+  "interactions": [
+    {
+      "description": "read legacy receipt data without backfill",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a legacy unnumbered pact sale exists"
+        }
+      ],
+      "request": {
+        "generators": {
+          "path": {
+            "expression": "/api/v1/sales/${saleId}",
+            "type": "ProviderState"
+          }
+        },
+        "matchingRules": {
+          "path": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          }
+        },
+        "method": "GET",
+        "path": "/api/v1/sales/550e8400-e29b-41d4-a716-446655440099"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "active": true,
+            "createdBy": "550e8400-e29b-41d4-a716-446655440002",
+            "customerId": "550e8400-e29b-41d4-a716-446655440001",
+            "date": "2026-11-10T00:00:00Z",
+            "details": [
+              {
+                "active": true,
+                "detailId": "550e8400-e29b-41d4-a716-446655440003",
+                "productId": "550e8400-e29b-41d4-a716-446655440004",
+                "quantity": 1,
+                "subtotalCents": 100,
+                "unitPriceCents": 100
+              }
+            ],
+            "saleId": "550e8400-e29b-41d4-a716-446655440099",
+            "totalCents": 100
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.createdBy": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.customerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.date": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.*Z$"
+                }
+              ]
+            },
+            "$.details[0].detailId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.details[0].productId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.saleId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "read numbered receipt data",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a numbered pact sale exists"
+        }
+      ],
+      "request": {
+        "generators": {
+          "path": {
+            "expression": "/api/v1/sales/${saleId}",
+            "type": "ProviderState"
+          }
+        },
+        "matchingRules": {
+          "path": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          }
+        },
+        "method": "GET",
+        "path": "/api/v1/sales/550e8400-e29b-41d4-a716-446655440099"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "active": true,
+            "commercialNumber": "VEN-2026-000001",
+            "createdBy": "550e8400-e29b-41d4-a716-446655440002",
+            "customerId": "550e8400-e29b-41d4-a716-446655440001",
+            "date": "2026-11-10T00:00:00Z",
+            "details": [
+              {
+                "active": true,
+                "detailId": "550e8400-e29b-41d4-a716-446655440003",
+                "productId": "550e8400-e29b-41d4-a716-446655440004",
+                "quantity": 1,
+                "subtotalCents": 100,
+                "unitPriceCents": 100
+              }
+            ],
+            "saleId": "550e8400-e29b-41d4-a716-446655440099",
+            "totalCents": 100
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.commercialNumber": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^VEN-[1-9][0-9]{3}-[0-9]{6}$"
+                }
+              ]
+            },
+            "$.createdBy": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.customerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.date": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T.*Z$"
+                }
+              ]
+            },
+            "$.details[0].detailId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.details[0].productId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.saleId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "SalesAPI"
+  }
+}
