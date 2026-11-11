@@ -73,6 +73,13 @@ cleanup() {
   exit "$exit_status"
 }
 trap cleanup EXIT
+mkdir -p "$api_dir/.contract-results"
+contract_dir=$(host_path "$api_dir/deploy/ci/contract")
+spec_dir=$(host_path "$docs_dir/$SPEC_REL")
+# Regression first, before anything is built: the shared Location header must accept what the Sales API returns and
+# must still reject malformed values THROUGH THE SAME VALIDATION THE CONTRACT RUN USES.
+docker run --rm --label "$label" --entrypoint python -v "$spec_dir:/spec:ro" -v "$contract_dir:/ct:ro" "$SCHEMATHESIS_IMAGE" /ct/location_regression.py /spec   2>&1 | tee "$api_dir/.contract-results/location-regression.log"
+[[ ${PIPESTATUS[0]} == 0 ]] || { echo 'Location header regression FAILED' >&2; exit 1; }
 for name in "$CI_MONGO_CONTAINER" "$runner" "$api"; do
   if docker container inspect "$name" >/dev/null 2>&1; then echo "Refusing existing container: $name" >&2; exit 1; fi
 done
@@ -130,18 +137,17 @@ mint() {  # role subject permissions-json
 ADMIN_TOKEN=$(mint ADMIN 00000000-0000-4000-8000-000000000001 '["sales:read","reports:read"]')
 SERVICE_TOKEN=$(mint SERVICE synkro-workflow '["sales:register"]')
 export ADMIN_TOKEN SERVICE_TOKEN
-mkdir -p "$api_dir/.contract-results"
 CHECKS=status_code_conformance,response_schema_conformance,content_type_conformance,response_headers_conformance
 # Run 1: the service token registers sales (POST); run 2: an ADMIN reads them (GET list, detail, reports).
 cat >"$scratch/post.sh" <<EOF
 schemathesis run /spec/synkro-sales-api.yaml --url http://synkro-sales-api:8080/api/v1 \
   -H "Authorization: Bearer \$SERVICE_TOKEN" --include-method POST --exclude-path /health \
-  --checks $CHECKS --max-examples 25 --workers 1 --no-color --report junit --report-dir /out --seed 20261110
+  --checks $CHECKS --max-examples 25 --workers 1 --no-color --report junit,ndjson --report-dir /out --seed 20261110
 EOF
 cat >"$scratch/get.sh" <<EOF
 schemathesis run /spec/synkro-sales-api.yaml --url http://synkro-sales-api:8080/api/v1 \
   -H "Authorization: Bearer \$ADMIN_TOKEN" --include-method GET --exclude-path /health \
-  --checks $CHECKS --max-examples 25 --workers 1 --no-color --report junit --report-dir /out --seed 20261110
+  --checks $CHECKS --max-examples 25 --workers 1 --no-color --report junit,ndjson --report-dir /out --seed 20261110
 EOF
 run_schemathesis() {  # name script
   docker run --rm --label "$label" --network "$MONGODB_NETWORK" -e SERVICE_TOKEN -e ADMIN_TOKEN --entrypoint sh \
@@ -149,8 +155,14 @@ run_schemathesis() {  # name script
     -v "$(host_path "$api_dir/.contract-results"):/out" -w /out "$SCHEMATHESIS_IMAGE" /run-contract.sh 2>&1 | sed -e "s/$SERVICE_TOKEN/[REDACTED]/g" -e "s/$ADMIN_TOKEN/[REDACTED]/g" | tee "$api_dir/.contract-results/$1.log"
   return "${PIPESTATUS[0]}"
 }
-# Both runs always execute so one report shows every mismatch; any failing run fails the script.
+# Success paths and documented errors with real data: create a sale, keep its id, read it back, replay it, provoke the errors.
+run_flow() {
+  docker run --rm --label "$label" --network "$MONGODB_NETWORK" -e SERVICE_TOKEN -e ADMIN_TOKEN --entrypoint python     -v "$spec_dir:/spec:ro" -v "$contract_dir:/ct:ro" "$SCHEMATHESIS_IMAGE" /ct/contract_flow.py /spec/synkro-sales-api.yaml http://synkro-sales-api:8080/api/v1 2>&1     | sed -e "s/$SERVICE_TOKEN/[REDACTED]/g" -e "s/$ADMIN_TOKEN/[REDACTED]/g" | tee "$api_dir/.contract-results/flow.log"
+  return "${PIPESTATUS[0]}"
+}
+# Every run always executes so one report shows every mismatch; any failing run fails the script.
 contract_status=0
+run_flow || contract_status=1
 run_schemathesis post post.sh || contract_status=1
 run_schemathesis get get.sh || contract_status=1
 printf 'contract revision: synkro-docs %s\nsales db revision: %s\nschemathesis: %s\n' "$DOCS_REF" "$DB_REF" "$SCHEMATHESIS_IMAGE" >"$api_dir/.contract-results/revisions.txt"
