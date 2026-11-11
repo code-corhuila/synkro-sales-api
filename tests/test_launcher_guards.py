@@ -134,6 +134,22 @@ class LauncherGuards(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn('must be clean', result.stderr)
 
+    def test_location_regression_covers_the_required_values_and_the_real_contract_file(self):
+        source = (ROOT / 'deploy/ci/contract/location_regression.py').read_text()
+        for value in ("f'/api/v1/sales/{SALE_ID}', True", "'https://synkro.example.test/api/v1/sales/", "('empty value', '', False)",
+                      "unencoded space", "line break", "_shared.yaml", "response_headers_conformance"):
+            self.assertIn(value, source)
+        # the contract run must start with that regression, before anything is built
+        script = CONTRACT.read_text()
+        self.assertLess(script.index('location_regression.py'), script.index('docker build'))
+        self.assertIn('contract_flow.py', script)
+
+    def test_flow_checks_success_paths_with_real_ids_and_replay(self):
+        source = (ROOT / 'deploy/ci/contract/contract_flow.py').read_text()
+        for step in ("returns 201", "Location is exactly the path of the created sale", "replays with 200",
+                     "GET /sales/{id} of the created sale returns 200", "is 404", "is 400", "is 401", "is 403", "is 422"):
+            self.assertIn(step, source)
+
     def test_contract_script_keeps_its_disposable_resource_guards(self):
         source = CONTRACT.read_text()
         for guard in ('Refusing existing container', 'Refusing existing network', 'require_disposable_database',
