@@ -151,7 +151,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-docs
-          ref: 66d44ff8fa879adfc3c59388befc40f9d2d86afd
+          ref: 921e69b4a742afd36f5d1cd43e10544a42137e87
           path: synkro-docs
           persist-credentials: false
       - name: Run Schemathesis against the real Sales API (Tier 3 contract tests)
