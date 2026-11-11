@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / 'deploy/ci/mongo-integration.sh'
 WORKFLOW = ROOT / '.github/workflows/ci.yml'
 # Sales DB revision that the qa promotion of HU-VEN-20 (yearly commercial number) is verified against.
-SALES_DB_V2_COMMIT = 'e3ef534d1c205db78f74cfe70e53f7086ac4d1b5'
+SALES_DB_V2_COMMIT = 'c6bacecc0f7c8743cf03c0a39f2fc7455db8c536'
 SHELL = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else 'bash'
 
 
