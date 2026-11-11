@@ -16,6 +16,7 @@ import sys
 import uuid
 
 import schemathesis
+import uri_reference_format  # noqa: F401  (RFC 3986 uri-reference check, shared with the Schemathesis runs)
 from schemathesis.core.failures import FailureGroup
 
 SPEC, BASE = sys.argv[1], sys.argv[2].rstrip('/')
