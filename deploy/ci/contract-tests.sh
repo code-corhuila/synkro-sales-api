@@ -78,8 +78,11 @@ contract_dir=$(host_path "$api_dir/deploy/ci/contract")
 spec_dir=$(host_path "$docs_dir/$SPEC_REL")
 # Regression first, before anything is built: the shared Location header must accept what the Sales API returns and
 # must still reject malformed values THROUGH THE SAME VALIDATION THE CONTRACT RUN USES.
-docker run --rm --label "$label" --entrypoint python -v "$spec_dir:/spec:ro" -v "$contract_dir:/ct:ro" "$SCHEMATHESIS_IMAGE" /ct/location_regression.py /spec   2>&1 | tee "$api_dir/.contract-results/location-regression.log"
-[[ ${PIPESTATUS[0]} == 0 ]] || { echo 'Location header regression FAILED' >&2; exit 1; }
+for regression_mode in lexical job cli; do
+  echo "--- Location regression, mode $regression_mode"
+  docker run --rm --label "$label" --entrypoint python -e PYTHONPATH=/ct -v "$spec_dir:/spec:ro" -v "$contract_dir:/ct:ro" "$SCHEMATHESIS_IMAGE"     /ct/location_regression.py /spec "$regression_mode" 2>&1 | tee -a "$api_dir/.contract-results/location-regression.log"
+  [[ ${PIPESTATUS[0]} == 0 ]] || { echo "Location header regression FAILED (mode $regression_mode)" >&2; exit 1; }
+done
 for name in "$CI_MONGO_CONTAINER" "$runner" "$api"; do
   if docker container inspect "$name" >/dev/null 2>&1; then echo "Refusing existing container: $name" >&2; exit 1; fi
 done
@@ -140,18 +143,20 @@ export ADMIN_TOKEN SERVICE_TOKEN
 CHECKS=status_code_conformance,response_schema_conformance,content_type_conformance,response_headers_conformance
 # Run 1: the service token registers sales (POST); run 2: an ADMIN reads them (GET list, detail, reports).
 cat >"$scratch/post.sh" <<EOF
+export PYTHONPATH=/ct SCHEMATHESIS_HOOKS=uri_reference_format
 schemathesis run /spec/synkro-sales-api.yaml --url http://synkro-sales-api:8080/api/v1 \
   -H "Authorization: Bearer \$SERVICE_TOKEN" --include-method POST --exclude-path /health \
   --checks $CHECKS --max-examples 25 --workers 1 --no-color --report junit,ndjson --report-dir /out --seed 20261110
 EOF
 cat >"$scratch/get.sh" <<EOF
+export PYTHONPATH=/ct SCHEMATHESIS_HOOKS=uri_reference_format
 schemathesis run /spec/synkro-sales-api.yaml --url http://synkro-sales-api:8080/api/v1 \
   -H "Authorization: Bearer \$ADMIN_TOKEN" --include-method GET --exclude-path /health \
   --checks $CHECKS --max-examples 25 --workers 1 --no-color --report junit,ndjson --report-dir /out --seed 20261110
 EOF
 run_schemathesis() {  # name script
   docker run --rm --label "$label" --network "$MONGODB_NETWORK" -e SERVICE_TOKEN -e ADMIN_TOKEN --entrypoint sh \
-    -v "$(host_path "$docs_dir/$SPEC_REL"):/spec:ro" -v "$(host_path "$scratch/$2"):/run-contract.sh:ro" \
+    -v "$(host_path "$docs_dir/$SPEC_REL"):/spec:ro" -v "$contract_dir:/ct:ro" -v "$(host_path "$scratch/$2"):/run-contract.sh:ro" \
     -v "$(host_path "$api_dir/.contract-results"):/out" -w /out "$SCHEMATHESIS_IMAGE" /run-contract.sh 2>&1 | sed -e "s/$SERVICE_TOKEN/[REDACTED]/g" -e "s/$ADMIN_TOKEN/[REDACTED]/g" | tee "$api_dir/.contract-results/$1.log"
   return "${PIPESTATUS[0]}"
 }

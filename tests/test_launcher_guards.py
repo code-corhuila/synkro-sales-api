@@ -136,13 +136,20 @@ class LauncherGuards(unittest.TestCase):
 
     def test_location_regression_covers_the_required_values_and_the_real_contract_file(self):
         source = (ROOT / 'deploy/ci/contract/location_regression.py').read_text()
-        for value in ("f'/api/v1/sales/{SALE_ID}', True", "'https://synkro.example.test/api/v1/sales/", "('empty value', '', False)",
-                      "unencoded space", "line break", "_shared.yaml", "response_headers_conformance"):
+        for value in ("relative path as the Sales API returns it", "absolute URL", "empty value", "unencoded space", "line break inside",
+                      "trailing LF", "trailing CR", "trailing CRLF", "trailing tab", "incomplete percent escape",
+                      "non-hexadecimal percent escape", "malformed IPv6 authority", "'1:abc'", "_shared.yaml",
+                      "response_headers_conformance", "'lexical'", "'job'", "'cli'", "SCHEMATHESIS_HOOKS"):
             self.assertIn(value, source)
+        hook = (ROOT / 'deploy/ci/contract/uri_reference_format.py').read_text()
+        self.assertIn("DRAFT4_SUPPLEMENTAL_FORMATS['uri-reference']", hook)
+        self.assertIn('OpenApiResponseHeader.validator', hook)
         # the contract run must start with that regression, before anything is built
         script = CONTRACT.read_text()
         self.assertLess(script.index('location_regression.py'), script.index('docker build'))
         self.assertIn('contract_flow.py', script)
+        self.assertIn('SCHEMATHESIS_HOOKS=uri_reference_format', script)
+        self.assertIn('import uri_reference_format', (ROOT / 'deploy/ci/contract/contract_flow.py').read_text())
 
     def test_flow_checks_success_paths_with_real_ids_and_replay(self):
         source = (ROOT / 'deploy/ci/contract/contract_flow.py').read_text()
