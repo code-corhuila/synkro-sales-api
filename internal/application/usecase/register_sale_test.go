@@ -366,3 +366,24 @@ func TestRegisterSale_ConcurrentReplay(t *testing.T) {
 		t.Errorf("created=%d stored=%d attempts=%d IDs=%d", created, len(repo.stored), len(repo.requests), ids.next)
 	}
 }
+
+// A year with no numbers left is a rejection of this request, not a broken store: it must stay recognisable
+// to the HTTP adapter instead of being folded into the generic persistence failure.
+func TestRegisterSale_ExhaustedYearlySequenceIsADomainRejection(t *testing.T) {
+	uc, repo, _, _ := registrationFixture()
+	repo.err = fmt.Errorf("allocate: %w", model.ErrCommercialSequenceExhausted)
+	result, err := uc.Register(context.Background(), registrationCommand(1))
+	assertNoRegistration(t, result)
+	if !errors.Is(err, model.ErrCommercialSequenceExhausted) || errors.Is(err, in.ErrPersistenceFailure) {
+		t.Fatalf("err = %v, want the domain rejection without the persistence failure", err)
+	}
+}
+
+func TestRegisterSale_OtherRepositoryFailuresStayPersistenceFailures(t *testing.T) {
+	uc, repo, _, _ := registrationFixture()
+	repo.err = errors.New("insert sale: connection reset")
+	_, err := uc.Register(context.Background(), registrationCommand(1))
+	if !errors.Is(err, in.ErrPersistenceFailure) || errors.Is(err, model.ErrCommercialSequenceExhausted) {
+		t.Fatalf("err = %v", err)
+	}
+}
