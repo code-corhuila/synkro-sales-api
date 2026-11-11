@@ -302,3 +302,16 @@ contract at the pinned `synkro-docs` revision (`DOCS_REF`) with the checks `stat
 because the contract documents it without the `/api/v1` prefix. Changing the contract means changing `DOCS_REF` (and the CI
 ref) in the same PR; the Python guard tests keep both equal. Reports are written to `.contract-results/` (ignored by Git).
 What it does not do: business rules (unit tests), database state (integration tests), consumer expectations (Pact).
+
+### Consumer-driven QA contracts
+
+Run `bash deploy/ci/contract-tests.sh /path/to/pinned-sales-db /path/to/pinned-docs` with Node 22 and Docker. Generated consumer artifacts,
+their published full commit revisions and UTF-8/LF SHA-256 hashes are recorded in
+`deploy/ci/pact/provenance.json`; verification rejects changed artifacts.
+Pact JS 17.1.4 is isolated from application dependencies. The owned Node runner
+installs system CA certificates required by Pact's HTTP verifier. A deliberately
+incompatible HTTP provider must receive the requests and fail verification before
+the real API/database verification can pass. State setup affects only the launcher's
+disposable database. Real verification failures propagate a nonzero exit and the
+launcher removes only its own labelled resources. No broker publication or hosted
+green result is implied. This gate complements OpenAPI conformance.
