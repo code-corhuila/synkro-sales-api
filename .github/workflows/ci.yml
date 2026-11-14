@@ -118,7 +118,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-sales-db
-          ref: c6bacecc0f7c8743cf03c0a39f2fc7455db8c536
+          ref: e2168fb52f693892b8bbec4c60597b330abeb845
           path: sales-db
           persist-credentials: false
       - name: Migrate isolated MongoDB 7.0 and run required integration scenarios
@@ -144,7 +144,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-sales-db
-          ref: c6bacecc0f7c8743cf03c0a39f2fc7455db8c536
+          ref: e2168fb52f693892b8bbec4c60597b330abeb845
           path: sales-db
           persist-credentials: false
       - name: Check out the pinned OpenAPI contract
