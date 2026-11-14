@@ -7,6 +7,9 @@ import (
 
 type SaleResponse struct {
 	SaleID     string               `json:"saleId"`
+	// CommercialNumber is the human reference (VEN-YYYY-NNNNNN); saleId stays the internal identity.
+	// Absent, never invented, for a sale stored without one.
+	CommercialNumber string `json:"commercialNumber,omitempty"`
 	CustomerID string               `json:"customerId"`
 	CreatedBy  string               `json:"createdBy"`
 	Date       string               `json:"date"`
@@ -34,7 +37,7 @@ type ListSalesResponse struct {
 }
 
 func saleResponse(s *model.Sale) SaleResponse {
-	response := SaleResponse{SaleID: s.ID(), CustomerID: s.CustomerID(), CreatedBy: s.CreatedBy(), Date: s.Date().UTC().Format(time.RFC3339Nano), TotalCents: s.TotalCents(), Active: s.Active(), Details: []SaleDetailResponse{}}
+	response := SaleResponse{SaleID: s.ID(), CommercialNumber: s.CommercialNumber(), CustomerID: s.CustomerID(), CreatedBy: s.CreatedBy(), Date: s.Date().UTC().Format(time.RFC3339Nano), TotalCents: s.TotalCents(), Active: s.Active(), Details: []SaleDetailResponse{}}
 	// The existing decoder rejects inactive details: every representable domain
 	// line is active. Never fabricate a restored historical lifecycle state.
 	for _, d := range s.Details() {

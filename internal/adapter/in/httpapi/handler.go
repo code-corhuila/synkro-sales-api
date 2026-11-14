@@ -248,6 +248,10 @@ func statusFor(err error) (int, string, string, []ErrorDetail) {
 		return 404, "NOT_FOUND", "Resource not found", nil
 	case errors.Is(err, in.ErrInvalidQuery), errors.Is(err, in.ErrInvalidIdempotencyKey):
 		return 400, "VALIDATION_ERROR", "Invalid request", []ErrorDetail{{Field: "request", Message: "invalid parameters"}}
+	case errors.Is(err, model.ErrCommercialSequenceExhausted):
+		// A domain rule (closed catalog in 07-api/guidelines.md): the Workflow reads 400/422 with a valid envelope as proof
+		// that the registration did not commit, so its stock reservation can be released. No internal detail is exposed.
+		return 422, "BUSINESS_RULE_VIOLATION", "The yearly commercial number sequence is exhausted", []ErrorDetail{{Field: "commercialNumber", Message: "yearly sequence exhausted"}}
 	case errors.Is(err, model.ErrAmountOverflow):
 		return 422, "BUSINESS_RULE_VIOLATION", "Computed sale amounts exceed the supported range", []ErrorDetail{{Field: "details", Message: "calculated amounts exceed int64 maximum"}}
 	case errors.Is(err, model.ErrInvalidQuantity), errors.Is(err, model.ErrInvalidUnitPrice), errors.Is(err, model.ErrQuantityTooLarge), errors.Is(err, model.ErrNoLines), errors.Is(err, model.ErrTooManyLines):

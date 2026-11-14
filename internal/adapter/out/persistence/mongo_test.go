@@ -30,7 +30,7 @@ func saleFixture(t *testing.T, count int) *model.Sale {
 
 func assertSale(t *testing.T, got, want *model.Sale) {
 	t.Helper()
-	if got == nil || got.ID() != want.ID() || got.CustomerID() != want.CustomerID() || got.CreatedBy() != want.CreatedBy() || got.Active() != want.Active() || got.TotalCents() != want.TotalCents() || !got.Date().Equal(time.UnixMilli(want.Date().UnixMilli())) || got.Date().Location() != time.UTC || !reflect.DeepEqual(got.Details(), want.Details()) {
+	if got == nil || got.ID() != want.ID() || got.CustomerID() != want.CustomerID() || got.CreatedBy() != want.CreatedBy() || got.Active() != want.Active() || got.TotalCents() != want.TotalCents() || got.CommercialNumber() != want.CommercialNumber() || !got.Date().Equal(time.UnixMilli(want.Date().UnixMilli())) || got.Date().Location() != time.UTC || !reflect.DeepEqual(got.Details(), want.Details()) {
 		t.Fatalf("sale did not retain its complete persisted representation: got=%+v want=%+v", got, want)
 	}
 }
@@ -54,7 +54,14 @@ func assertRawFields(t *testing.T, raw bson.Raw, fields map[string]bson.Type) {
 
 func assertSaleBSON(t *testing.T, raw bson.Raw, want *model.Sale, key string) {
 	t.Helper()
-	assertRawFields(t, raw, map[string]bson.Type{"_id": bson.TypeString, "customerId": bson.TypeString, "createdBy": bson.TypeString, "date": bson.TypeDateTime, "totalCents": bson.TypeInt64, "active": bson.TypeBoolean, "idempotencyKey": bson.TypeString, "details": bson.TypeArray})
+	fields := map[string]bson.Type{"_id": bson.TypeString, "customerId": bson.TypeString, "createdBy": bson.TypeString, "date": bson.TypeDateTime, "totalCents": bson.TypeInt64, "active": bson.TypeBoolean, "idempotencyKey": bson.TypeString, "details": bson.TypeArray}
+	if want.CommercialNumber() != "" {
+		fields["commercialNumber"] = bson.TypeString
+		if raw.Lookup("commercialNumber").StringValue() != want.CommercialNumber() {
+			t.Fatal("incorrect commercialNumber")
+		}
+	}
+	assertRawFields(t, raw, fields)
 	if raw.Lookup("_id").StringValue() != want.ID() || raw.Lookup("customerId").StringValue() != want.CustomerID() || raw.Lookup("createdBy").StringValue() != want.CreatedBy() || raw.Lookup("date").DateTime() != want.Date().UnixMilli() || raw.Lookup("totalCents").Int64() != want.TotalCents() || !raw.Lookup("active").Boolean() || raw.Lookup("idempotencyKey").StringValue() != key {
 		t.Fatal("incorrect root BSON values")
 	}
@@ -208,7 +215,7 @@ func TestSaleMappingRejectsInvalidInput(t *testing.T) {
 
 func TestMongoRepositoryRejectsBeforeInsertion(t *testing.T) {
 	// Neither rejected input nor a cancelled request may reach the collection.
-	repo := NewMongoRepository(nil)
+	repo := NewMongoRepository(nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	got, created, err := repo.CreateOnce(ctx, "fixture-key", saleFixture(t, 1))
@@ -237,5 +244,60 @@ func TestSaleMappingDatetimeAndAmountBoundaries(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertSale(t, got, s)
+	}
+}
+
+func TestSaleWithCommercialNumberRoundTrips(t *testing.T) {
+	s := saleFixture(t, 2)
+	if err := s.AssignCommercialNumber("VEN-2026-000123"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := encodeSale("number-key", s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSaleBSON(t, raw, s, "number-key")
+	got, err := decodeSale(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSale(t, got, s)
+	if got.CommercialNumber() != "VEN-2026-000123" {
+		t.Fatalf("number lost: %q", got.CommercialNumber())
+	}
+}
+
+func TestStoredSaleWithoutCommercialNumberStaysWithoutOne(t *testing.T) {
+	// A sale stored before the field existed has 8 fields; reading it must not invent a number.
+	raw, err := encodeSale("legacy-key", saleFixture(t, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodeSale(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.CommercialNumber() != "" {
+		t.Fatalf("a number was invented on read: %q", got.CommercialNumber())
+	}
+}
+
+func TestDecodeRejectsMalformedCommercialNumber(t *testing.T) {
+	for _, bad := range []string{"VEN-000001", "ven-2026-000001", "VEN-2026-0000001", "VEN-2026-000000", " "} {
+		doc := validDocument(t)
+		doc["commercialNumber"] = bad
+		raw, err := bson.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := decodeSale(raw); !errors.Is(err, ErrInvalidSaleDocument) {
+			t.Errorf("%q accepted: %v", bad, err)
+		}
+	}
+	doc := validDocument(t)
+	doc["commercialNumber"] = int32(7)
+	raw, _ := bson.Marshal(doc)
+	if _, err := decodeSale(raw); !errors.Is(err, ErrInvalidSaleDocument) {
+		t.Errorf("non-string number accepted: %v", err)
 	}
 }

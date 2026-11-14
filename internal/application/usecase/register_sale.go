@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"unicode/utf8"
 
@@ -45,6 +46,11 @@ func (u *RegisterSale) Register(ctx context.Context, cmd in.RegisterSaleCommand)
 
 	stored, created, err := u.repo.CreateOnce(ctx, cmd.IdempotencyKey, sale)
 	if err != nil {
+		// No numbers left for the year rejects this request; it is not a broken store, so the HTTP
+		// adapter must be able to tell it apart from a persistence failure.
+		if errors.Is(err, model.ErrCommercialSequenceExhausted) {
+			return in.RegisterSaleResult{}, model.ErrCommercialSequenceExhausted
+		}
 		return in.RegisterSaleResult{}, fmt.Errorf("%w: %w", in.ErrPersistenceFailure, err)
 	}
 	return in.RegisterSaleResult{Sale: stored, Created: created}, nil

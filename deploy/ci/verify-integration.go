@@ -26,10 +26,10 @@ func verify() error {
 	}
 	defer f.Close()
 	required := map[string]bool{}
-	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
+	for _, name := range []string{"FirstInsertion", "IdempotentReplay", "DuplicateIDDifferentKey", "ConcurrentRegistration", "CommercialNumberConcurrency", "CommercialNumberReplay", "CommercialNumberExhaustion", "CommercialNumberYearRollover", "CommercialNumberSameKeyConcurrent", "CommercialNumberGapWhenInsertFails", "CommercialNumberExhaustionLeavesNoPartialSale", "ValidatorRejection", "Permissions", "UnsafeReplayRejected", "CancelledContext", "InvalidAuthentication", "UnavailableServer"} {
 		required["TestMongoIntegration/"+name] = false
 	}
-	for _, name := range []string{"FirstRegistration", "Replay", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission", "ReportsAdminAndSalesperson", "ReportsAccessControl", "ReportsPaginationAndMeta", "ReportsFiltersAndRouting", "ReportsDatabaseFailure"} {
+	for _, name := range []string{"FirstRegistration", "Replay", "RegistrationAtTheYearlyCeiling", "AdminListAndDetail", "SalespersonOwnership", "ForeignSaleForbidden", "UnknownAndInactiveNotFound", "PaginationUTC", "InconsistentDocumentRejected", "DatabaseFailure", "NoDeletePermission", "ReportsAdminAndSalesperson", "ReportsAccessControl", "ReportsPaginationAndMeta", "ReportsFiltersAndRouting", "ReportsDatabaseFailure"} {
 		required["TestMongoIntegration/HTTP/"+name] = false
 	}
 	// HU-VEN-10: the three report pipelines must run against the real database.

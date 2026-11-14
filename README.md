@@ -164,8 +164,9 @@ faithfully. No domain lifecycle attributes or behavior were introduced.
 ### Real integration tests
 
 Use Docker and Bash (Git Bash on Windows). The compatible migrations are pinned to
-[`synkro-sales-db@v2.0.0 (344d917)`](https://github.com/code-corhuila/synkro-sales-db/tree/344d917264bbb5ad17c40d2e3a33f217a7a94866).
-The annotated tag `v2.0.0` (object `5bbad89`) resolves to commit `344d917`; the launcher pins the commit, not the tag object.
+[`synkro-sales-db@e3ef534`](https://github.com/code-corhuila/synkro-sales-db/tree/e3ef534d1c205db78f74cfe70e53f7086ac4d1b5),
+the revision that adds the yearly commercial sale number structures (changesets `sale-011`…`sale-014`) on top of
+the released `v2.0.0` (`344d917`) schema; the launcher pins the commit, not a tag.
 The launcher requires a clean checkout at that exact commit and reads it without
 modifying it. The approved documentation reviewed for this adapter is
 `synkro-docs/main@61056c93e6e0783a9199bf56778e9494739bc458`.
@@ -279,5 +280,38 @@ absolute `JWT_PUBLIC_KEY_PATH`. It sets inline `JWT_PUBLIC_KEY` empty even if an
 included service uses that input. The standalone binary still supports either source.
 `MONGODB_TIMEOUT` and `MONGODB_MAX_POOL_SIZE` retain their published 5s/10 defaults
 and operator overrides. The required real MongoDB CI suite uses the published secure
-Sales DB revision `344d917264bbb5ad17c40d2e3a33f217a7a94866`; no migration guard or
+Sales DB revision `e3ef534d1c205db78f74cfe70e53f7086ac4d1b5`; no migration guard or
 HTTP, architecture, race, unit or coverage check is removed.
+
+### Contract tests (Tier 3 of `11-quality/testing-strategy.md`)
+
+The `qa` policy (`00-governance/git-conventions.md`, `branching-policy.md`) requires "contract tests (Pact)" as a status
+check. The project's own testing strategy defines the contract tier as **OpenAPI conformance run by Schemathesis against the
+running service** on every PR. `deploy/ci/contract-tests.sh` implements exactly that for this service; it is **not**
+consumer-driven Pact and must not be reported as such.
+
+```bash
+bash deploy/ci/contract-tests.sh ../synkro-sales-db ../synkro-docs
+```
+
+It builds this checkout, starts it against a disposable MongoDB 7.0 carrying the pinned Sales DB migrations (same pin as the
+real-MongoDB launcher, read from `deploy/ci/mongo-integration.sh`), mints throwaway RS256 tokens (a SERVICE token with
+`sales:register` for `POST`, an ADMIN token for `GET`), and runs Schemathesis 4.33.2 (image pinned by digest) against the
+contract at the pinned `synkro-docs` revision (`DOCS_REF`) with the checks `status_code_conformance`,
+`response_schema_conformance`, `content_type_conformance` and `response_headers_conformance`. `/health` is checked directly
+because the contract documents it without the `/api/v1` prefix. Changing the contract means changing `DOCS_REF` (and the CI
+ref) in the same PR; the Python guard tests keep both equal. Reports are written to `.contract-results/` (ignored by Git).
+What it does not do: business rules (unit tests), database state (integration tests), consumer expectations (Pact).
+
+### Consumer-driven QA contracts
+
+Run `bash deploy/ci/contract-tests.sh /path/to/pinned-sales-db /path/to/pinned-docs` with Node 22 and Docker. Generated consumer artifacts,
+their published full commit revisions and UTF-8/LF SHA-256 hashes are recorded in
+`deploy/ci/pact/provenance.json`; verification rejects changed artifacts.
+Pact JS 17.1.4 is isolated from application dependencies. The owned Node runner
+installs system CA certificates required by Pact's HTTP verifier. A deliberately
+incompatible HTTP provider must receive the requests and fail verification before
+the real API/database verification can pass. State setup affects only the launcher's
+disposable database. Real verification failures propagate a nonzero exit and the
+launcher removes only its own labelled resources. No broker publication or hosted
+green result is implied. This gate complements OpenAPI conformance.

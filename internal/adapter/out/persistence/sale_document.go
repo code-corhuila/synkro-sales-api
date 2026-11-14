@@ -23,6 +23,8 @@ type saleDocument struct {
 	Active         bool             `bson:"active"`
 	IdempotencyKey string           `bson:"idempotencyKey"`
 	Details        []detailDocument `bson:"details"`
+	// CommercialNumber is absent from sales stored before it existed; it is never invented on read.
+	CommercialNumber string `bson:"commercialNumber,omitempty"`
 }
 
 type detailDocument struct {
@@ -53,6 +55,7 @@ func encodeSale(key string, sale *model.Sale) (bson.Raw, error) {
 		return nil, invalidDocument("nil sale")
 	}
 	doc := saleDocument{ID: sale.ID(), CustomerID: sale.CustomerID(), CreatedBy: sale.CreatedBy(), Date: bson.NewDateTimeFromTime(sale.Date()), TotalCents: sale.TotalCents(), Active: sale.Active(), IdempotencyKey: key}
+	doc.CommercialNumber = sale.CommercialNumber()
 	for _, line := range sale.Details() {
 		// RegisterSale/AddDetail guarantee int32 quantities and freeze prices.
 		// Every detail created by the current domain is active; inactive stored
@@ -97,7 +100,12 @@ func decodeSale(raw bson.Raw) (*model.Sale, error) {
 	if err := raw.Validate(); err != nil {
 		return nil, invalidDocument("malformed BSON")
 	}
-	if err := exactFields(raw, map[string]bson.Type{"_id": bson.TypeString, "customerId": bson.TypeString, "createdBy": bson.TypeString, "date": bson.TypeDateTime, "totalCents": bson.TypeInt64, "active": bson.TypeBoolean, "idempotencyKey": bson.TypeString, "details": bson.TypeArray}); err != nil {
+	fields := map[string]bson.Type{"_id": bson.TypeString, "customerId": bson.TypeString, "createdBy": bson.TypeString, "date": bson.TypeDateTime, "totalCents": bson.TypeInt64, "active": bson.TypeBoolean, "idempotencyKey": bson.TypeString, "details": bson.TypeArray}
+	// The only optional field: sales stored before the commercial number existed lack it.
+	if _, err := raw.LookupErr("commercialNumber"); err == nil {
+		fields["commercialNumber"] = bson.TypeString
+	}
+	if err := exactFields(raw, fields); err != nil {
 		return nil, err
 	}
 	values, err := raw.Lookup("details").Array().Values()
@@ -147,6 +155,11 @@ func decodeSale(raw bson.Raw) (*model.Sale, error) {
 	for i, detail := range sale.Details() {
 		if detail.SubtotalCents() != doc.Details[i].SubtotalCents {
 			return nil, invalidDocument("subtotal differs from domain calculation")
+		}
+	}
+	if doc.CommercialNumber != "" {
+		if err := sale.AssignCommercialNumber(doc.CommercialNumber); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidSaleDocument, err)
 		}
 	}
 	return sale, nil
