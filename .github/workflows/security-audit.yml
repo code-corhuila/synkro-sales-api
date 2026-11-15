@@ -19,13 +19,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-workflow
-          ref: e59cb72edc1c5ed72e721b433cdd3efaabf97058
+          ref: 0cf8cab2011434ed32d20a4f7f3092af5b1b09aa
           path: workflow
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: code-corhuila/synkro-sales-db
-          ref: c6bacecc0f7c8743cf03c0a39f2fc7455db8c536
+          ref: e2168fb52f693892b8bbec4c60597b330abeb845
           path: sales-db
           persist-credentials: false
       - uses: actions/setup-python@v5
