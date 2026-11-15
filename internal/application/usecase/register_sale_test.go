@@ -50,6 +50,10 @@ func (f *fakeSales) CreateOnce(ctx context.Context, key string, sale *model.Sale
 		return sale, true, f.err
 	}
 	if original, exists := f.stored[key]; exists {
+		// The port contract: a reused key answers only for the same business input.
+		if !original.SameRegistration(sale) {
+			return nil, false, out.ErrIdempotencyConflict
+		}
 		return original, false, nil
 	}
 	if f.stored == nil {
@@ -260,10 +264,7 @@ func TestRegisterSale_IdempotentReplayKeepsOriginal(t *testing.T) {
 	}
 	originalDate := first.Sale.Date()
 	originalDetails := first.Sale.Details()
-	// Even a different valid payload and a later clock must return the original.
-	cmd.CustomerID = "customer-2"
-	cmd.CreatedBy = "user-2"
-	cmd.Lines = []in.RegisterSaleLine{{ProductID: "product-2", Quantity: 3, UnitPriceCents: 9999}}
+	// The same input at a later clock, with new generated identifiers, must return the original.
 	clock.date = clock.date.Add(24 * time.Hour)
 	again, err := uc.Register(context.Background(), cmd)
 	if err != nil || again.Created || again.Sale == nil {

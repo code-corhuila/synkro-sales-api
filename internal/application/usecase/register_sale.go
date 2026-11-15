@@ -51,6 +51,10 @@ func (u *RegisterSale) Register(ctx context.Context, cmd in.RegisterSaleCommand)
 		if errors.Is(err, model.ErrCommercialSequenceExhausted) {
 			return in.RegisterSaleResult{}, model.ErrCommercialSequenceExhausted
 		}
+		// A reused key with different input is a rejection of this request, never a store failure.
+		if errors.Is(err, out.ErrIdempotencyConflict) {
+			return in.RegisterSaleResult{}, in.ErrIdempotencyConflict
+		}
 		return in.RegisterSaleResult{}, fmt.Errorf("%w: %w", in.ErrPersistenceFailure, err)
 	}
 	return in.RegisterSaleResult{Sale: stored, Created: created}, nil
