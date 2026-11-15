@@ -6,7 +6,6 @@ import (
 	"github.com/code-corhuila/synkro-sales-api/internal/application/port/in"
 	"github.com/code-corhuila/synkro-sales-api/internal/application/port/out"
 	"github.com/code-corhuila/synkro-sales-api/internal/domain/model"
-	"github.com/google/uuid"
 	"log/slog"
 	"net/http"
 	"os"
@@ -59,10 +58,7 @@ func NewRouter(d Dependencies) http.Handler {
 	}
 	api := requireAuth(d.Verifier, http.HandlerFunc(d.serveSales))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		trace := r.Header.Get("X-Correlation-Id")
-		if trace == "" {
-			trace = uuid.NewString()
-		}
+		trace := correlationOrNew(r.Header.Get("X-Correlation-Id"))
 		w.Header().Set("X-Correlation-Id", trace)
 		r = r.WithContext(context.WithValue(r.Context(), correlationKey{}, trace))
 		sw := &statusWriter{ResponseWriter: w}
@@ -150,14 +146,25 @@ func (d Dependencies) failure(w http.ResponseWriter, r *http.Request, err error)
 	writeError(w, status, code, message, details)
 }
 func (d Dependencies) register(w http.ResponseWriter, r *http.Request) {
+	event := auditEvent{
+		correlationID: w.Header().Get("X-Correlation-Id"),
+		idempotency:   r.Header.Get("Idempotency-Key"),
+		actorID:       principalFrom(r.Context()).Subject,
+	}
 	if !authorize(w, principalFrom(r.Context()).CanRegister()) {
+		event.result = auditDenied
+		d.audit(r.Context(), event)
 		return
 	}
 	cmd, ok := registrationCommand(w, r)
 	if !ok {
+		event.result = auditRejected
+		d.audit(r.Context(), event)
 		return
 	}
 	if d.Register == nil {
+		event.result = auditFailed
+		d.audit(r.Context(), event)
 		d.failure(w, r, errors.New("registration dependency missing"))
 		return
 	}
@@ -165,19 +172,37 @@ func (d Dependencies) register(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	result, err := d.Register.Register(ctx, cmd)
 	if err != nil {
+		event.result = auditResultFor(err)
+		d.audit(r.Context(), event)
 		d.failure(w, r, err)
 		return
 	}
 	if result.Sale == nil || !result.Sale.Active() {
+		event.result = auditFailed
+		d.audit(r.Context(), event)
 		d.failure(w, r, errors.New("invalid registration result"))
 		return
 	}
 	status := 200
+	event.result, event.authorID = auditReplayed, result.Sale.CreatedBy()
 	if result.Created {
 		status = 201
+		event.result = auditCreated
 		w.Header().Set("Location", "/api/v1/sales/"+result.Sale.ID())
 	}
+	d.audit(r.Context(), event)
 	writeJSON(w, status, saleResponse(result.Sale))
+}
+
+// auditResultFor classifies a failed registration without exposing its cause.
+func auditResultFor(err error) string {
+	if errors.Is(err, in.ErrIdempotencyConflict) {
+		return auditConflict
+	}
+	if status, _, _, _ := statusFor(err); status < 500 {
+		return auditRejected
+	}
+	return auditFailed
 }
 func (d Dependencies) list(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
