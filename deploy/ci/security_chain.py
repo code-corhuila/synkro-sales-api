@@ -199,7 +199,17 @@ def execute(sales, workflow, database, audit=False, idempotency=False):
                                 events.append(event)
                         except (ValueError, AttributeError):
                             continue
-                    check(any(all(field in event for field in ('timestamp', 'service', 'step', 'actorId', 'action', 'result')) and event['step'] == 'register-sale' for event in events), source + ' structured audit links trace, saga, register-sale step, actor, action, result and time')
+                    actor = caller if source == 'Workflow' else 'synkro-workflow'
+                    action, result = ('execute-step', 'succeeded') if source == 'Workflow' else ('register-sale', 'created')
+                    allowed = {'timestamp', 'service', 'correlationId', 'sagaId', 'step', 'actorId', 'action', 'result'}
+                    if source == 'Sales':
+                        allowed.update(('level', 'message', 'authorId'))
+                    check(any(all(field in event for field in ('timestamp', 'service', 'step', 'actorId', 'action', 'result'))
+                              and event['step'] == 'register-sale' and event['actorId'] == actor
+                              and event['action'] == action and event['result'] == result
+                              and (source != 'Sales' or event.get('authorId') == caller)
+                              and set(event).issubset(allowed) for event in events),
+                          source + ' allowlisted audit links trace, saga, step, verified actor, action, result and time')
             print('PASS cross-service security chain; Customers and Products are controlled; Workflow, Sales and both stores are real', flush=True)
         finally:
             for container in reversed(containers):

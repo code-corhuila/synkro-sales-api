@@ -92,6 +92,7 @@ func TestMongoIntegration(t *testing.T) {
 	t.Run("Reports", func(t *testing.T) { runReportIntegration(t, client) })
 	t.Run("Security284", func(t *testing.T) { runSecurity284Integration(t, client) })
 	t.Run("Security285", func(t *testing.T) { runSecurity285Integration(t, client) })
+	t.Run("Security286", func(t *testing.T) { runSecurity286Integration(t, client) })
 	newKey := func() string { return uuid.NewString() + ":register-sale" }
 	countOne := func(t *testing.T, key string) {
 		t.Helper()

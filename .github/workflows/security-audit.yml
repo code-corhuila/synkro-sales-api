@@ -1,0 +1,43 @@
+name: Workflow and Sales safe audit
+
+on:
+  pull_request:
+    branches: [develop, qa, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  joint-application-log-capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: sales-api
+      - uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-workflow
+          ref: 0cf8cab2011434ed32d20a4f7f3092af5b1b09aa
+          path: workflow
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-sales-db
+          ref: e2168fb52f693892b8bbec4c60597b330abeb845
+          path: sales-db
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install cryptography==46.0.3
+      - name: Verify joint safe actor-action-result audit and generic errors
+        run: |
+          python sales-api/deploy/ci/security_chain.py --sales sales-api --workflow workflow --sales-db sales-db --audit --idempotency | tee security-audit-evidence.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-audit-evidence
+          path: security-audit-evidence.txt
+          if-no-files-found: error
