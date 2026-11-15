@@ -38,12 +38,12 @@ faithfully. No domain lifecycle attributes or behavior were introduced.
 
 ### Real integration tests
 
-Use Docker and Bash (Git Bash on Windows). The compatible migrations are pinned to
-[`synkro-sales-db@c6bacec`](https://github.com/code-corhuila/synkro-sales-db/tree/c6bacecc0f7c8743cf03c0a39f2fc7455db8c536),
-the revision selected on QA (`DB_REF` in `deploy/ci/mongo-integration.sh` and the `ref` in `.github/workflows/ci.yml`); the launcher pins the commit, not a tag.
-Earlier QA documentation named the Sales DB revision `e3ef534d1c205db78f74cfe70e53f7086ac4d1b5`
-(yearly commercial sale number structures, changesets `sale-011`…`sale-014`, on top of the released `v2.0.0` (`344d917`) schema);
-the script and workflow are authoritative for the current pin.
+Use Docker and Bash (Git Bash on Windows). On main, the compatible migrations are pinned to
+[`synkro-sales-db@e2168fb`](https://github.com/code-corhuila/synkro-sales-db/tree/e2168fb52f693892b8bbec4c60597b330abeb845),
+the Sales DB main merge (`DB_REF` in `deploy/ci/mongo-integration.sh` and the `ref` in `.github/workflows/ci.yml`); the launcher pins the commit, not a tag.
+Earlier documentation named other Sales DB revisions: QA selected `c6bacec` (`c6bacecc0f7c8743cf03c0a39f2fc7455db8c536`), and an earlier main README named `e3ef534d1c205db78f74cfe70e53f7086ac4d1b5`
+(yearly commercial sale number structures, changesets `sale-011`…`sale-014`, on top of the released `v2.0.0` (`344d917`) schema).
+Those are historical; the script and workflow are authoritative for the current pin.
 The launcher requires a clean checkout at that exact commit and reads it without
 modifying it. The approved documentation reviewed for this adapter is
 `synkro-docs/main@61056c93e6e0783a9199bf56778e9494739bc458`.

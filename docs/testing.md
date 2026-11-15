@@ -47,8 +47,9 @@ these instructions.
 
 The `qa` policy (`00-governance/git-conventions.md`, `branching-policy.md`) requires "contract tests (Pact)" as a status
 check. The project's own testing strategy defines the contract tier as **OpenAPI conformance run by Schemathesis against the
-running service** on every PR. `deploy/ci/contract-tests.sh` implements exactly that for this service; it is **not**
-consumer-driven Pact and must not be reported as such.
+running service** on every PR. `deploy/ci/contract-tests.sh` implements that for this service; the OpenAPI conformance
+result is **not** consumer-driven Pact and must not be reported as such. The same launcher also runs the separate
+consumer-driven verification described below.
 
 ```bash
 bash deploy/ci/contract-tests.sh ../synkro-sales-db ../synkro-docs
@@ -61,7 +62,7 @@ contract at the pinned `synkro-docs` revision (`DOCS_REF`) with the checks `stat
 `response_schema_conformance`, `content_type_conformance` and `response_headers_conformance`. `/health` is checked directly
 because the contract documents it without the `/api/v1` prefix. Changing the contract means changing `DOCS_REF` (and the CI
 ref) in the same PR; the Python guard tests keep both equal. Reports are written to `.contract-results/` (ignored by Git).
-What it does not do: business rules (unit tests), database state (integration tests), consumer expectations (Pact).
+The conformance step does not check business rules (unit tests), database state (integration tests) or consumer expectations (the Pact verification below).
 
 ### Consumer-driven QA contracts
 
