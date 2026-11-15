@@ -48,6 +48,9 @@ func (f *memorySales) CreateOnce(ctx context.Context, key string, s *model.Sale)
 		return nil, false, f.failure
 	}
 	if id, ok := f.keys[key]; ok {
+		if !f.sales[id].SameRegistration(s) {
+			return nil, false, out.ErrIdempotencyConflict
+		}
 		return f.sales[id], false, nil
 	}
 	f.sales[s.ID()] = s
@@ -205,9 +208,15 @@ func TestSalesHTTPRegistrationAndReplay(t *testing.T) {
 	if len(line) != 6 {
 		t.Fatal("unexpected detail fields", line)
 	}
-	replay := f.request(t, "POST", "/api/v1/sales", strings.ReplaceAll(requestBody, "1250", "9000"), "synkro-workflow", "SERVICE", "sales:register")
+	replay := f.request(t, "POST", "/api/v1/sales", requestBody, "synkro-workflow", "SERVICE", "sales:register")
 	if replay.Code != 200 || replay.Body.String() != first.Body.String() || len(f.repo.sales) != 1 {
 		t.Fatal("replay changed original", replay.Code, replay.Body.String())
+	}
+	// The same key with a different frozen price is a conflict, and the stored sale is not echoed back.
+	conflict := f.request(t, "POST", "/api/v1/sales", strings.ReplaceAll(requestBody, "1250", "9000"), "synkro-workflow", "SERVICE", "sales:register")
+	assertHTTPError(t, conflict, 422, "BUSINESS_RULE_VIOLATION")
+	if len(f.repo.sales) != 1 || strings.Contains(conflict.Body.String(), got.SaleID) {
+		t.Fatal("conflicting retry stored or returned a sale", conflict.Body.String())
 	}
 	for _, role := range []string{"ADMIN", "SALESPERSON", "INVENTORY", "SERVICE"} {
 		sub := ownerID
