@@ -88,6 +88,7 @@ func TestMongoIntegration(t *testing.T) {
 	}
 	collection := client.Database("sales").Collection("sale")
 	repo := NewMongoRepository(collection, client.Database("sales").Collection("sale_counter"))
+	t.Run("Security284", func(t *testing.T) { runSecurity284Integration(t, client) })
 	t.Run("HTTP", func(t *testing.T) { runHTTPIntegration(t, client) })
 	t.Run("Reports", func(t *testing.T) { runReportIntegration(t, client) })
 	newKey := func() string { return uuid.NewString() + ":register-sale" }

@@ -6,16 +6,16 @@ import (
 )
 
 type SaleResponse struct {
-	SaleID     string               `json:"saleId"`
+	SaleID string `json:"saleId"`
 	// CommercialNumber is the human reference (VEN-YYYY-NNNNNN); saleId stays the internal identity.
 	// Absent, never invented, for a sale stored without one.
-	CommercialNumber string `json:"commercialNumber,omitempty"`
-	CustomerID string               `json:"customerId"`
-	CreatedBy  string               `json:"createdBy"`
-	Date       string               `json:"date"`
-	TotalCents int64                `json:"totalCents"`
-	Active     bool                 `json:"active"`
-	Details    []SaleDetailResponse `json:"details"`
+	CommercialNumber string               `json:"commercialNumber,omitempty"`
+	CustomerID       string               `json:"customerId"`
+	CreatedBy        string               `json:"createdBy"`
+	Date             string               `json:"date"`
+	TotalCents       int64                `json:"totalCents"`
+	Active           bool                 `json:"active"`
+	Details          []SaleDetailResponse `json:"details"`
 }
 type SaleDetailResponse struct {
 	DetailID       string `json:"detailId"`

@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+// extraRequired lists real-database scenarios registered by the verify-security-*.go files that
+// are compiled together with this gate; each must have executed and passed.
+var extraRequired []string
+
 func main() {
 	if err := verify(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -35,6 +39,10 @@ func verify() error {
 	// HU-VEN-10: the three report pipelines must run against the real database.
 	for _, name := range []string{"ActiveSelectionAndGrouping", "SalespersonOwnership", "UTCDayBoundaries", "MonthAndYearBoundaries", "TopProductsLinesTiesAndInactiveDetails", "PaginationOverGroups", "EmptyResults", "OverflowFailsSafely", "DatabaseFailureAndCancellation"} {
 		required["TestMongoIntegration/Reports/"+name] = false
+	}
+	// Security regressions register their own mandatory scenarios (verify-security-*.go).
+	for _, name := range extraRequired {
+		required[name] = false
 	}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
