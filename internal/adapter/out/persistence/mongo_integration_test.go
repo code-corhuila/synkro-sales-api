@@ -88,9 +88,10 @@ func TestMongoIntegration(t *testing.T) {
 	}
 	collection := client.Database("sales").Collection("sale")
 	repo := NewMongoRepository(collection, client.Database("sales").Collection("sale_counter"))
-	t.Run("Security284", func(t *testing.T) { runSecurity284Integration(t, client) })
 	t.Run("HTTP", func(t *testing.T) { runHTTPIntegration(t, client) })
 	t.Run("Reports", func(t *testing.T) { runReportIntegration(t, client) })
+	t.Run("Security284", func(t *testing.T) { runSecurity284Integration(t, client) })
+	t.Run("Security285", func(t *testing.T) { runSecurity285Integration(t, client) })
 	newKey := func() string { return uuid.NewString() + ":register-sale" }
 	countOne := func(t *testing.T, key string) {
 		t.Helper()
@@ -120,7 +121,7 @@ func TestMongoIntegration(t *testing.T) {
 		if err != nil || !created {
 			t.Fatal("first insertion failed", err)
 		}
-		attempt := saleFixture(t, 2)
+		attempt := equivalentSale(t, s, s.Date())
 		got, created, err := repo.CreateOnce(ctx, key, attempt)
 		if err != nil || created {
 			t.Fatalf("replay: created=%v err=%v", created, err)
@@ -148,8 +149,9 @@ func TestMongoIntegration(t *testing.T) {
 		const n = 32
 		key := newKey()
 		fixtures := make([]*model.Sale, n)
+		base := saleFixture(t, 1)
 		for i := range fixtures {
-			fixtures[i] = saleFixture(t, 1)
+			fixtures[i] = equivalentSale(t, base, base.Date())
 		}
 		type outcome struct {
 			sale    *model.Sale
@@ -222,7 +224,8 @@ func TestMongoIntegration(t *testing.T) {
 	})
 	t.Run("CommercialNumberReplay", func(t *testing.T) {
 		key := newKey()
-		first, created, err := repo.CreateOnce(ctx, key, saleFixture(t, 1))
+		firstAttempt := saleFixture(t, 1)
+		first, created, err := repo.CreateOnce(ctx, key, firstAttempt)
 		if err != nil || !created || first.CommercialNumber() == "" {
 			t.Fatalf("first: created=%v number=%q err=%v", created, first.CommercialNumber(), err)
 		}
@@ -234,7 +237,7 @@ func TestMongoIntegration(t *testing.T) {
 		if err := counters.FindOne(ctx, bson.M{"_id": year}).Decode(&counterBefore); err != nil {
 			t.Fatal(err)
 		}
-		again, created, err := repo.CreateOnce(ctx, key, saleFixture(t, 2))
+		again, created, err := repo.CreateOnce(ctx, key, equivalentSale(t, firstAttempt, firstAttempt.Date()))
 		if err != nil || created {
 			t.Fatalf("replay: created=%v err=%v", created, err)
 		}
@@ -309,8 +312,13 @@ func TestMongoIntegration(t *testing.T) {
 			{"04:59:59 UTC on 1 Jan is still 2090 in Colombia", time.Date(2091, 1, 1, 4, 59, 59, 0, time.UTC), newKey(), "VEN-2090-000003"},
 			{"05:00:00 UTC on 1 Jan is already 2091 in Colombia", time.Date(2091, 1, 1, 5, 0, 0, 0, time.UTC), newKey(), "VEN-2091-000002"},
 		}
+		var firstSale *model.Sale
 		for _, step := range steps {
-			got, created, err := repo.CreateOnce(ctx, step.key, saleAt(t, uuid.NewString(), step.at))
+			attempt := saleAt(t, uuid.NewString(), step.at)
+			if step.key == keyA {
+				firstSale = attempt
+			}
+			got, created, err := repo.CreateOnce(ctx, step.key, attempt)
 			if err != nil || !created || got.CommercialNumber() != step.want {
 				t.Fatalf("%s: created=%v err=%v, want %s", step.name, created, err, step.want)
 			}
@@ -321,7 +329,7 @@ func TestMongoIntegration(t *testing.T) {
 		}
 		// A retry of the first request after the year changed returns the original number and spends none.
 		before := counterSeq(t, "VEN-2091")
-		again, created, err := repo.CreateOnce(ctx, keyA, saleAt(t, uuid.NewString(), time.Date(2091, 1, 2, 9, 0, 0, 0, cot)))
+		again, created, err := repo.CreateOnce(ctx, keyA, equivalentSale(t, firstSale, time.Date(2091, 1, 2, 9, 0, 0, 0, cot)))
 		if err != nil || created || again.CommercialNumber() != "VEN-2090-000001" {
 			t.Fatalf("replay across the year change: created=%v err=%v", created, err)
 		}
@@ -332,6 +340,7 @@ func TestMongoIntegration(t *testing.T) {
 	t.Run("CommercialNumberSameKeyConcurrent", func(t *testing.T) {
 		const n = 16
 		key, at := newKey(), time.Date(2093, 3, 1, 10, 0, 0, 0, cot)
+		base := saleAt(t, uuid.NewString(), at)
 		before := counterSeq(t, "VEN-2093")
 		type outcome struct {
 			number  string
@@ -349,7 +358,7 @@ func TestMongoIntegration(t *testing.T) {
 					return
 				}
 				results <- outcome{got.CommercialNumber(), created, nil}
-			}(saleAt(t, uuid.NewString(), at))
+			}(equivalentSale(t, base, at))
 		}
 		close(start)
 		numbers, created := map[string]int{}, 0
@@ -402,11 +411,12 @@ func TestMongoIntegration(t *testing.T) {
 			t.Fatalf("the next sale must skip the spent number, got %q (%v)", next.CommercialNumber(), err)
 		}
 		// Retrying the failed request allocates a fresh number: only a stored sale owns one.
-		retry, created, err := repo.CreateOnce(ctx, lost, saleAt(t, uuid.NewString(), at))
+		retried := saleAt(t, uuid.NewString(), at)
+		retry, created, err := repo.CreateOnce(ctx, lost, retried)
 		if err != nil || !created || retry.CommercialNumber() != "VEN-2094-000004" {
 			t.Fatalf("retry of a failed request: %q created=%v err=%v", retry.CommercialNumber(), created, err)
 		}
-		again, created, err := repo.CreateOnce(ctx, lost, saleAt(t, uuid.NewString(), at))
+		again, created, err := repo.CreateOnce(ctx, lost, equivalentSale(t, retried, at))
 		if err != nil || created || again.CommercialNumber() != retry.CommercialNumber() {
 			t.Fatalf("an uncertain retry after the insert must return the stored number: %q created=%v err=%v", again.CommercialNumber(), created, err)
 		}
@@ -417,7 +427,8 @@ func TestMongoIntegration(t *testing.T) {
 		}
 		at := time.Date(2098, 5, 1, 12, 0, 0, 0, cot)
 		lastKey := newKey()
-		last, _, err := repo.CreateOnce(ctx, lastKey, saleAt(t, uuid.NewString(), at))
+		lastAttempt := saleAt(t, uuid.NewString(), at)
+		last, _, err := repo.CreateOnce(ctx, lastKey, lastAttempt)
 		if err != nil || last.CommercialNumber() != "VEN-2098-999999" {
 			t.Fatalf("the last number of the year must be issued: %v", err)
 		}
@@ -432,7 +443,7 @@ func TestMongoIntegration(t *testing.T) {
 			t.Fatalf("the counter moved past the ceiling: %d", seq)
 		}
 		// The last sale of the year can still be replayed at the ceiling.
-		if again, created, err := repo.CreateOnce(ctx, lastKey, saleAt(t, uuid.NewString(), at)); err != nil || created || again.CommercialNumber() != "VEN-2098-999999" {
+		if again, created, err := repo.CreateOnce(ctx, lastKey, equivalentSale(t, lastAttempt, at)); err != nil || created || again.CommercialNumber() != "VEN-2098-999999" {
 			t.Fatalf("replay at the ceiling: %v", err)
 		}
 	})

@@ -62,11 +62,7 @@ func (r *MongoRepository) CreateOnce(ctx context.Context, key string, sale *mode
 	// A replay must not consume a number: look the key up before allocating.
 	original, err := r.collection.FindOne(ctx, bson.D{{Key: "idempotencyKey", Value: key}}).Raw()
 	if err == nil {
-		replayed, err := decodeSale(original)
-		if err != nil {
-			return nil, false, err
-		}
-		return replayed, false, nil
+		return replayOf(original, sale)
 	}
 	if !errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, false, fmt.Errorf("find original sale: %w", err)
@@ -103,9 +99,20 @@ func (r *MongoRepository) CreateOnce(ctx context.Context, key string, sale *mode
 	if err != nil {
 		return nil, false, fmt.Errorf("find original sale: %w", err)
 	}
-	stored, err = decodeSale(original)
+	// The unique index decided the race; the loser still has to prove it asked for the same thing.
+	return replayOf(original, sale)
+}
+
+// replayOf answers a request whose key already owns a stored sale. The stored sale is decoded
+// first, so a corrupt document is a persistence failure, and returned only when the attempt
+// carries the same business input; otherwise nothing stored leaves the repository.
+func replayOf(original bson.Raw, attempt *model.Sale) (*model.Sale, bool, error) {
+	stored, err := decodeSale(original)
 	if err != nil {
 		return nil, false, err
+	}
+	if !stored.SameRegistration(attempt) {
+		return nil, false, out.ErrIdempotencyConflict
 	}
 	return stored, false, nil
 }

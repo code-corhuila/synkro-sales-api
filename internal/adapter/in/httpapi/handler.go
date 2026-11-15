@@ -246,6 +246,10 @@ func statusFor(err error) (int, string, string, []ErrorDetail) {
 		return 500, "INTERNAL_ERROR", "Unexpected error", nil
 	case errors.Is(err, in.ErrSaleNotFound):
 		return 404, "NOT_FOUND", "Resource not found", nil
+	case errors.Is(err, in.ErrIdempotencyConflict):
+		// The contract has no 409 (07-api/guidelines.md); a reused key with different input is a business
+		// rule violation, worded like the other services' key conflicts and carrying nothing that was stored.
+		return 422, "BUSINESS_RULE_VIOLATION", "The Idempotency-Key was already used with a different request", []ErrorDetail{{Field: "Idempotency-Key", Message: "The Idempotency-Key was already used with a different request"}}
 	case errors.Is(err, in.ErrInvalidQuery), errors.Is(err, in.ErrInvalidIdempotencyKey):
 		return 400, "VALIDATION_ERROR", "Invalid request", []ErrorDetail{{Field: "request", Message: "invalid parameters"}}
 	case errors.Is(err, model.ErrCommercialSequenceExhausted):
