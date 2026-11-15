@@ -99,7 +99,7 @@ func runHTTPIntegration(t *testing.T, client *mongo.Client) {
 		t.Fatal("registration prerequisite failed")
 	}
 	t.Run("Replay", func(t *testing.T) {
-		w := request(router, "POST", "/api/v1/sales", strings.ReplaceAll(body, "1250", "9000"), "synkro-workflow", "SERVICE", "sales:register")
+		w := request(router, "POST", "/api/v1/sales", body, "synkro-workflow", "SERVICE", "sales:register")
 		var got httpapi.SaleResponse
 		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &got) != nil || got.SaleID != original.SaleID || got.TotalCents != original.TotalCents || got.Details[0].DetailID != original.Details[0].DetailID {
 			t.Fatal(w.Code, w.Body.String())

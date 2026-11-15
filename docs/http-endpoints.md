@@ -17,7 +17,7 @@ service names. Identity headers such as `X-User-Id` have no effect.
 
 | Operation | Required signed identity and permission | Result |
 |---|---|---|
-| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; same key returns original sale with `200` |
+| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; same key and same request returns original sale with `200`; same key with a different request is `422` |
 | `GET /api/v1/sales` | `ADMIN` or `SALESPERSON`, `sales:read` | Paginated active sales; salesperson ownership applies to both database reads and counts |
 | `GET /api/v1/sales/{id}` | `ADMIN` or `SALESPERSON`, `sales:read` | Active sale; another salesperson's sale returns `403`; missing/inactive returns `404` |
 
@@ -34,6 +34,44 @@ Lists accept only `page` (default 1), `limit` (1–100, default 20), optional
 inclusive using an exclusive next-day end. Sorting is `date DESC, _id DESC`.
 Empty lists have `data: []`, `total: 0`, and `totalPages: 0`. Unknown, repeated,
 empty or malformed filters are rejected before querying MongoDB.
+
+### Idempotency key reuse
+
+A key owns exactly one sale. A retry is the *same request* when `customerId`,
+`createdBy` and the multiset of lines (`productId`, `quantity`, frozen `unitPriceCents`)
+are equal. Line order does not matter, because the Workflow normalises its input by
+product before registering. Generated identifiers, the creation instant and the
+commercial number are never compared. A replay found by the initial lookup returns
+the original sale with `200` and consumes no commercial number.
+
+Reusing the key with any other customer, author, product, quantity or price is
+rejected with the service's generic business-rule envelope (the shared error catalog
+has no `409`; other services answer a reused key the same way):
+
+```json
+{
+  "error": "BUSINESS_RULE_VIOLATION",
+  "message": "The Idempotency-Key was already used with a different request",
+  "details": [{ "field": "Idempotency-Key", "message": "The Idempotency-Key was already used with a different request" }],
+  "traceId": "<correlation id>"
+}
+```
+
+Neither the stored sale nor any stored value is echoed, and no sale is inserted or replaced. The
+comparison is made both before the insert and after a duplicate-key error, so
+concurrent requests with one key and conflicting input persist exactly one sale and
+every loser gets either the original (same request) or this rejection. A Workflow that
+receives this `422` with a valid envelope treats the registration as not committed.
+As with other insert failures, a concurrent loser can already have advanced the
+commercial counter; a gap is accepted to preserve unique numbers without a shared
+transaction over the counter and sale. Serial replays and conflicts do not advance it.
+
+### Authorship and trust
+
+`createdBy` is accepted only from the authenticated `synkro-workflow` service
+credential; every other caller is rejected (`401`/`403`) before any write or replay.
+The Workflow takes it from the validated human token subject and ignores any
+`createdBy` in its own request body. Sales computes every subtotal and the total.
 
 Responses use explicit contract DTOs; they never expose an idempotency key or
 database metadata. Every request reuses or generates `X-Correlation-Id`; error

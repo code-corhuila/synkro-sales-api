@@ -22,7 +22,13 @@ and the database health check with the same pooled client. The adapter never
 creates collections, indexes, roles or clients. Apply the Sales DB migrations before
 using it. One complete `InsertOne` stores the sale and idempotency key together;
 the migrated unique index is the concurrency boundary. Duplicate errors trigger a
-lookup by the same key; an unrelated duplicate `_id` remains an error. Disable
+lookup by the same key; an unrelated duplicate `_id` remains an error. The stored sale
+found by either lookup is returned only when `Sale.SameRegistration` holds for the
+attempt (same customer, author and lines); otherwise `out.ErrIdempotencyConflict` is
+returned, which the use case maps to `in.ErrIdempotencyConflict` and HTTP to `422`
+(see `docs/http-endpoints.md`). The mandatory real-database scenarios for this and for
+registration authorization are listed in `deploy/ci/verify-security-*.go`; a
+missing or skipped one fails the evidence gate. Disable
 retryable writes on the shared client (`retryWrites=false`) for a single wire attempt;
 the adapter never changes the document/key or retries ambiguous insertion failures.
 
