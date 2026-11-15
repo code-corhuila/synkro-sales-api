@@ -1,317 +1,139 @@
 # synkro-sales-api
 
-> sales bounded context: service API
+> Sales service that persists workflow-created sales, enforces authorship and calculates daily, monthly and top-product reports.
 
-Part of the **SynkroTech SAS Sales Management System** â€” organization `code-corhuila`.
-Governance and documentation live in [`synkro-docs`](https://github.com/code-corhuila/synkro-docs).
+Part of the **SynkroTech SAS Sales Management System**. Architecture, decisions and
+contracts live in [synkro-docs](https://github.com/code-corhuila/synkro-docs).
 
-## Running locally
+**Quick start:** from this root, configure the migrated Sales MongoDB replica set and Auth public key, then run `go run ./cmd/sales-api`. See [Getting started](#getting-started).
 
-Apply the Sales DB migrations first. Supply `MONGODB_URI` for `sales_app` and
-exactly one of `JWT_PUBLIC_KEY` (PEM, including literal escaped `\n`) or
-`JWT_PUBLIC_KEY_FILE` (an accessible public PEM file). Missing or invalid keys
-stop startup; there is no development authentication bypass. Never use an
-administrator URI or put credentials/private keys in this repository.
+## What it does
 
-```bash
+- Accepts sale registration from the Workflow service with idempotency and server-calculated integer-cent totals.
+- Lists and reads active sales, limiting a SALESPERSON to their own records.
+- Calculates paginated reports with MongoDB aggregation pipelines.
+- Stores the yearly commercial sale reference without claiming fiscal-invoice validity.
+- Owns Sales behavior; synkro-sales-db owns validators, indexes and migrations.
+
+## Where it fits
+
+```mermaid
+flowchart LR
+  Gateway["synkro-api-gateway"] -->|"human reads and reports"| API["synkro-sales-api"]
+  Workflow["synkro-workflow"] -->|"SERVICE registration"| API
+  API --> Mongo[("MongoDB: sales database")]
+```
+
+Workflow validates the customer and reserves inventory before Sales registration. Sales does not reach into another domain's database.
+
+## Tech stack
+
+| Component | Choice |
+|---|---|
+| Language / HTTP | Go 1.26.9; net/http |
+| Persistence | MongoDB Go driver v2; MongoDB 7 replica set |
+| Build / test | Go tools; real Mongo integration and contract scripts |
+| Runtime | Docker API; internal HTTP 8080 |
+
+## Dependencies
+
+| Depends on | Purpose | Configuration |
+|---|---|---|
+| synkro-sales-db | Collection validator, indexes and commercial counter | Apply owning migrations first |
+| synkro-infra-mongo | Authenticated replica set | sales_app connection |
+| Auth public key | Local RS256 verification | JWT_PUBLIC_KEY or JWT_PUBLIC_KEY_FILE |
+| synkro-workflow | Authorized sale registration caller | SERVICE token with sales:register |
+
+## Getting started
+
+Use **PowerShell or Bash** from the repository root with Go 1.26.9, a migrated replica set and protected application-only configuration:
+
+```text
 go run ./cmd/sales-api
 ```
 
-The service listens on `:8080` (override with `HTTP_PORT`). Verify it:
+The Go process consumes `MONGODB_URI` and exactly one of `JWT_PUBLIC_KEY` / `JWT_PUBLIC_KEY_FILE`. In Compose, `SALES_APP_MONGODB_URI` and `JWT_PUBLIC_KEY_PATH` supply those runtime inputs. Administrator connection strings belong only to migration/bootstrap tooling.
 
-```bash
-curl http://localhost:8080/health
+For the complete platform, start from [synkro-infra-postgres](https://github.com/code-corhuila/synkro-infra-postgres).
+
+## Configuration
+
+The committed [.env.example](.env.example) is the configuration inventory.
+Its values are examples; required inputs and defaults follow its comments and the
+owning implementation. Keep real secrets in protected local files.
+
+| Variable | Purpose |
+|---|---|
+| `HTTP_PORT` | Http port |
+| `SALES_APP_MONGODB_URI` | Connection address, origin or build-time entry point |
+| `MONGODB_TIMEOUT` | Mongodb timeout |
+| `MONGODB_MAX_POOL_SIZE` | Mongodb max pool size |
+| `JWT_PUBLIC_KEY_PATH` | Identity key input; keep private material outside Git |
+
+The example includes Compose-facing inputs. The actual Go process reads MONGODB_URI, JWT_PUBLIC_KEY / JWT_PUBLIC_KEY_FILE, MONGODB_TIMEOUT and MONGODB_MAX_POOL_SIZE. Keep connection credentials out of shell history.
+
+## Interface
+
+| Method / route | Access / result |
+|---|---|
+| POST /api/v1/sales | SERVICE synkro-workflow, sales:register; idempotent creation |
+| GET /api/v1/sales; GET /{id} | ADMIN or SALESPERSON with sales:read; authorship enforced |
+| GET /api/v1/sales/reports/daily | Authorized daily aggregation |
+| GET /api/v1/sales/reports/monthly | Authorized monthly aggregation |
+| GET /api/v1/sales/reports/top-products | Authorized product aggregation |
+| GET /health | Public; 200 or 503 after bounded MongoDB ping |
+
+Requests, ownership rules and exact response codes are in the [Sales contract](https://github.com/code-corhuila/synkro-docs/blob/main/07-api/contracts/openapi/synkro-sales-api.yaml).
+
+## Project structure
+
+```text
+cmd/sales-api/       process entry and wiring
+internal/domain/    sale rules and integer money
+internal/application/ use cases and ports
+internal/adapter/   HTTP/JWT and MongoDB persistence
+scripts/            real-engine, coverage and contract tools
+tests/              provider/consumer contract fixtures
+docs/               deployment, persistence and report details
 ```
 
-Public `/health` pings this service's MongoDB replica set: `200` with database
-`ok`, or `503` with database `down`. `MONGODB_TIMEOUT` defaults to `5s` (maximum
-`10s`), and `MONGODB_MAX_POOL_SIZE` defaults to `10`. The server has explicit
-header/read/write/idle limits of 5/10/15/60 seconds and a 20-second shutdown.
+## Testing
 
-## Sales HTTP endpoints (HU-VEN-09)
-
-All Sales operations require an RS256 token verified against the configured
-Auth public key. Claims `sub`, `roles`, `permissions`, `iat`, `exp` and `jti`
-are required; expiration and issued-at use at most 30 seconds of clock skew.
-Human subjects are canonical UUIDs; service subjects are the documented
-service names. Identity headers such as `X-User-Id` have no effect.
-
-| Operation | Required signed identity and permission | Result |
-|---|---|---|
-| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; same key returns original sale with `200` |
-| `GET /api/v1/sales` | `ADMIN` or `SALESPERSON`, `sales:read` | Paginated active sales; salesperson ownership applies to both database reads and counts |
-| `GET /api/v1/sales/{id}` | `ADMIN` or `SALESPERSON`, `sales:read` | Active sale; another salesperson's sale returns `403`; missing/inactive returns `404` |
-
-Registration accepts only `customerId`, `createdBy` and 1â€“100 `details` with
-`productId`, integer `quantity`, and integer `unitPriceCents`. It requires an
-8â€“128-character `Idempotency-Key`. The trusted workflow supplies the original
-human author; Sales performs no customer/stock calls. The existing domain
-generates all calculated amounts and detects arithmetic/storage invariants.
-Invalid input is `400`; domain invariants in a new request are `422`; stored
-corruption and unexpected persistence failures are neutral `500` responses.
-
-Lists accept only `page` (default 1), `limit` (1â€“100, default 20), optional
-`customerId`, and optional `from`/`to` in `YYYY-MM-DD` format. UTC days are
-inclusive using an exclusive next-day end. Sorting is `date DESC, _id DESC`.
-Empty lists have `data: []`, `total: 0`, and `totalPages: 0`. Unknown, repeated,
-empty or malformed filters are rejected before querying MongoDB.
-
-Responses use explicit contract DTOs; they never expose an idempotency key or
-database metadata. Every request reuses or generates `X-Correlation-Id`; error
-`traceId` matches it, and structured JSON logs include it. Unsupported methods
-return `400 VALIDATION_ERROR` with `Allow`, preserving the documented code/status
-catalog; unknown routes use `404 NOT_FOUND`.
-
-## Sales reports (HU-VEN-10)
-
-| Operation | Required signed identity and permission | Result |
-|---|---|---|
-| `GET /api/v1/sales/reports/daily` | `ADMIN` or `SALESPERSON`, `reports:read` | `day`, `dailyTotalCents`, `saleCount`, newest day first |
-| `GET /api/v1/sales/reports/monthly` | `ADMIN` or `SALESPERSON`, `reports:read` | `month` (first day, `YYYY-MM-DD`), `monthlyTotalCents`, `saleCount`, newest first |
-| `GET /api/v1/sales/reports/top-products` | `ADMIN` or `SALESPERSON`, `reports:read` | `productId`, `totalQuantity`, `totalRevenueCents`; quantity descending, then `productId` ascending |
-
-Each response is `{data, meta}` with the shared `page`/`limit`/`total`/`totalPages`
-metadata. Reports need `reports:read` (`07-api/authentication.md`), not `sales:read`:
-an ADMIN or SALESPERSON token without it is `403`, as are `INVENTORY` and `SERVICE`
-tokens. A SALESPERSON's `createdBy` match is taken from the verified token subject and
-applied in the MongoDB `$match`; there is no `createdBy`/`userId` query parameter
-(any such parameter is a `400`). Report paths are dispatched explicitly before the
-sale-identifier match, so `reports` is never read as a sale ID; any other path under
-`/api/v1/sales/reports` is `404`, and only `GET` is accepted.
-
-Accepted parameters are `from`, `to`, `page` and `limit`, validated before MongoDB is
-touched. `from` is an inclusive UTC midnight and `to` an inclusive UTC day, applied as
-the exclusive next midnight. Filters select *sales* by their stored date before
-grouping, so a monthly report with `from=2026-10-15` sums only sales from that day on.
-
-### Aggregation design
-
-All three are live `sales.sale` aggregation pipelines (ADR-010 Decision 4); nothing is
-stored or cached. The first stage matches `active: true`, the date range and, for a
-SALESPERSON, `createdBy` (so `idx_sale_date` / `idx_sale_created_by_date` serve it).
-Daily and monthly then `$group` on `$dateTrunc` in `UTC` (a month is already its first
-day), summing `totalCents` and counting sales. Top products `$unwind`s `details`,
-keeps `details.active: true`, groups by `details.productId` and sums `quantity` and
-`subtotalCents`; two lines of one product in a sale both count.
-
-Pagination happens after grouping and ordering. One `$facet` returns the requested
-slice (`$sort`/`$skip`/`$limit`) and the count of *all* groups from the same snapshot,
-so `meta.total` cannot disagree with `data`; the alternative (a second `$count`
-aggregation) can disagree under concurrent writes. `allowDiskUse` is set, and no
-sale is read into application memory.
-
-MongoDB's `$sum` silently turns an `int64` overflow into a `double`. Aggregate results
-are decoded strictly (integer BSON types only, non-negative, exact field set, UTC
-midnight keys, canonical product UUIDs); anything else is an internal failure, shown
-to clients as a neutral `500 INTERNAL_ERROR` and never rounded.
-
-Report amounts come from the *stored* `totalCents` and `subtotalCents`; unlike
-`GET /sales/{id}`, reports do not re-derive them through the domain. A sale's
-`totalCents` is counted whole in daily/monthly totals even if some of its lines are
-inactive, while top products drops inactive lines (ADR-010). Current writes only
-create active lines.
-
-Coverage from the real-MongoDB run (`deploy/ci/mongo-integration.sh`, race detector
-on): domain 100.00%, application 95.71%, infrastructure 88.30%, global 89.72%
-(minimums 90/80/60/80). The evidence gate now also requires nine `Reports/*` and five
-`HTTP/Reports*` scenarios to execute and pass.
-
-## Toolchain and vulnerability scanning
-
-The module and the container image build with Go 1.26.9 (`go.mod`,
-`deploy/Dockerfile`, `deploy/ci/mongo-integration.sh` and the CI workflow use the
-same patch release). Dependencies that carried reachable advisories are at
-`golang.org/x/net` v0.60.0 and `golang.org/x/text` v0.42.0 (their transitive
-requirements raise `x/crypto`, `x/sys` and `x/sync`). CI runs
-`govulncheck ./...` (v1.9.0); any reachable vulnerability fails the build. Run it
-locally with `go install golang.org/x/vuln/cmd/govulncheck@v1.9.0 && govulncheck ./...`.
-
-## Running the tests
-
-```bash
+```text
+go build ./...
+go vet ./...
 go test ./...
 ```
 
-## MongoDB persistence
+Unit tests are distinct from real MongoDB persistence tests and provider-contract checks. Run the source-documented integration/contract launchers only with their disposable fixtures; detailed commands and provenance remain in the testing and persistence guide.
 
-`internal/adapter/out/persistence.NewMongoRepository(collection)` implements the
-application's `SaleRepository`. Inject `client.Database("sales").Collection("sale")`
-from one shared official MongoDB v2.8.2 client; its pool and shutdown belong to the
-composition root. Connect as `sales_app`, authenticated in `admin`, with only
-`sales_writer@sales`. `MONGODB_URI` in `.env.example` documents the runtime
-configuration. URL-encode the password and supply it through secret storage.
-Do not use migration administrator credentials in the application.
+## Branching and contributing
 
-The composition root wires registration, query use cases, JWT verification,
-and the database health check with the same pooled client. The adapter never
-creates collections, indexes, roles or clients. Apply the Sales DB migrations before
-using it. One complete `InsertOne` stores the sale and idempotency key together;
-the migrated unique index is the concurrency boundary. Duplicate errors trigger a
-lookup by the same key; an unrelated duplicate `_id` remains an error. Disable
-retryable writes on the shared client (`retryWrites=false`) for a single wire attempt;
-the adapter never changes the document/key or retries ambiguous insertion failures.
+Use a `feat/`, `fix/` or `chore/` child branch and a PR into `develop`.
+Permanent branches are `develop`, `qa` and `main`; none accepts direct commits.
+Promote through a `qa-<description>` or release child with `git cherry-pick -x`.
+`main` requires approval from `ariel5253`. Use English Conventional Commits.
+See [Git conventions](https://github.com/code-corhuila/synkro-docs/blob/main/00-governance/git-conventions.md).
 
-The mapper writes exactly the approved root and detail fields: canonical lowercase
-UUID strings, int32 quantities, int64 monetary values, booleans and BSON datetime.
-Prices and amounts are copied from the domain. Both initial and replay results use
-UTC epoch milliseconds (`UnixMilli`), so sub-millisecond precision is intentionally
-lost; the caller's aggregate is not mutated. Restoring through `model.RegisterSale`
-verifies every subtotal and the total. Unknown/missing/duplicate fields, wrong BSON
-types, invalid UUIDs and inconsistent arithmetic fail with `ErrInvalidSaleDocument`.
-Inactive sales or details also fail: the current domain cannot restore those states
-faithfully. No domain lifecycle attributes or behavior were introduced.
+## Further documentation
 
-### Real integration tests
+- [Local development](docs/local-development.md).
+- [Http endpoints](docs/http-endpoints.md).
+- [Reports](docs/reports.md).
+- [Testing](docs/testing.md).
+- [Persistence and integration](docs/persistence-and-integration.md).
+- [Domain rules](https://github.com/code-corhuila/synkro-docs/blob/main/02-domain/entities-and-rules.md), [contracts](https://github.com/code-corhuila/synkro-docs/tree/main/07-api/contracts/openapi) and [testing strategy](https://github.com/code-corhuila/synkro-docs/blob/main/11-quality/testing-strategy.md).
 
-Use Docker and Bash (Git Bash on Windows). The compatible migrations are pinned to
-[`synkro-sales-db@e3ef534`](https://github.com/code-corhuila/synkro-sales-db/tree/e3ef534d1c205db78f74cfe70e53f7086ac4d1b5),
-the revision that adds the yearly commercial sale number structures (changesets `sale-011`…`sale-014`) on top of
-the released `v2.0.0` (`344d917`) schema; the launcher pins the commit, not a tag.
-The launcher requires a clean checkout at that exact commit and reads it without
-modifying it. The approved documentation reviewed for this adapter is
-`synkro-docs/main@61056c93e6e0783a9199bf56778e9494739bc458`.
-
-```bash
-bash deploy/ci/mongo-integration.sh ../synkro-sales-db
-```
-
-The launcher creates an exclusive Docker network and a uniquely named MongoDB 7.0
-`rs0` container, using the Sales DB bootstrap, authentication, generated disposable
-credentials, tmpfs storage and `com.synkro.sales-db.disposable=true`. It builds and
-runs that repository's pinned Liquibase runner with a read-only migration mount;
-preflight/postflight verify the actual validator, indexes and grants. A temporary
-Go 1.26.9 Linux container joins the same network, resolves the advertised replica
-hostname and runs all tests with race detection as `sales_app`. There are no public
-ports or persistent volumes. The integration suite verifies the writable primary,
-server version and authenticated principal before any permission probe.
-
-Before any database resource exists, the launcher fills a fresh, run-owned Docker
-volume with the module graph (`go mod download` and `go mod verify`, read-only source,
-default bridge, no database variables). The test and verifier containers mount that
-cache with `GOPROXY=off`, `GOTOOLCHAIN=local` and `GOFLAGS=-mod=readonly`, so modules
-are never downloaded during the run while the tests still reach Mongo on the run
-network. A preparation failure stops the run before the network or MongoDB exist.
-Cleanup removes the cache only when its label matches the run; an existing volume with
-that name is refused. Design and test IDs: `docs/design/offline-module-cache.md`.
-The fixture tests (`tests/test_module_cache_launcher.py`) use a fake Docker; they do
-not replace the real integration run above.
-
-`TEST_MONGODB_URI` is injected by this launcher. Ordinary `go test ./...` skips the
-real suite when it is absent. Mandatory runs also set `REQUIRE_MONGODB_INTEGRATION=1`
-and attest to the labelled tmpfs target with `TEST_MONGODB_DISPOSABLE=1` and
-`TEST_MONGO_HOST`; do not set these for a persistent database. The evidence gate
-requires every real scenario to have executed and passed, including 32 concurrent
-calls, schema rejection, denied removal, unsafe replay and connection/context errors.
-A skipped scenario, missing URI, failed migration or failed test returns nonzero.
-
-HU-VEN-09 adds ten mandatory HTTP scenarios to those ten persistence scenarios:
-creation, replay, ADMIN reads, salesperson filtering, foreign-sale rejection,
-unknown/inactive exclusion, pagination/UTC boundaries, corrupt-document rejection,
-database failure propagation, and denied deletion. HTTP tests use generated test
-RSA keys and the real registration/query use cases; no authentication bypass is
-used. For a local pinned dependency copy, clone it inside the ignored
-`.integration-results/` directory with `core.autocrlf=false`, check out the exact
-revision above, and pass that path to the launcher. The original dependency
-checkout does not need to change. Git Bash uses the native Docker Desktop client.
-
-Results are saved in the ignored `.integration-results/` directory: Go JSON test
-events and full-repository coverage. The gate verifies domain â‰¥90%, application
-â‰¥80%, infrastructure â‰¥60% (adapters, config and command entrypoint), global â‰¥80%.
-GitHub Actions preserves its ordinary 80% global coverage gate and adds a mandatory
- integration job for the permanent branches and PRs targeting `develop`, `qa`, `main`.
-Cleanup removes only this run's containers, exclusive network and runner image/tag;
-the existing `synkro-mongo` and its volumes are never targeted.
-
-ADR-010 records a historical prerequisite for creating the infrastructure repos;
-this task explicitly permits the disposable Sales DB CI bootstrap instead. The
-test strategy permits broader local targets, but this launcher intentionally requires
-a disposable instance so permission probes cannot touch persistent data. ADR-010,
-the data model and migrations include detail `active`; the entity catalog and current
-domain omit it, which is why inactive restoration is rejected.
-
-### Contract review notes for HU-VEN-09
-
-The 16 requested source documents were read from
-`synkro-docs/main@61056c93e6e0783a9199bf56778e9494739bc458`.
-The story is [HU-VEN-09, issue #240](https://github.com/code-corhuila/synkro-docs/issues/240).
-No documentation repository or applied migration was changed.
-
-The Sales OpenAPI omits a detail `400` response and persistence `500` responses,
-although this story and shared guidelines require them. Its server base ends
-in `/api/v1`, which would place its `/health` path under that prefix; the
-explicit public `/health` requirement is implemented. The closed error catalog
-has no method-not-allowed status/code pairing, so unsupported methods use the
-documented `400 VALIDATION_ERROR`. Approval is required for a later OpenAPI
-amendment; these gaps were reported before implementation.
-
-The entity catalog and domain omit a detail lifecycle flag while ADR-010 and
-OpenAPI include it. The existing decoder still rejects inactive details and
-inconsistent amounts instead of inventing state. Root inactive documents are
-excluded in MongoDB and return `404`. The functional requirement's old `CHECK`
-description and parts of the traceability matrix remain historical and do not
-describe the delivered MongoDB adapter. ADR-006 supersedes ADR-002's older
-direct-token authorship rule: workflow body `createdBy` remains the human author.
-
-## Branching
-
-Three permanent branches. **None of them accepts a direct commit** â€” you enter through a child
-branch and leave through a Pull Request.
-
-```
-develop  <--PR--  feat/... fix/... chore/...
-qa       <--PR--  qa/...
-main     <--PR--  release/...  hotfix/...
-```
-
-Promotion happens **by re-application** (`git cherry-pick -x`), never by merging one permanent
-branch into another: `merge develop -> qa` and `merge qa -> main` do not exist in this model.
-
-`main` requires **1 approval from `ariel5253`**. On `develop` and `qa` the team sets its own review
-rule.
-
-Full policy: `00-governance/branching-policy.md` in `synkro-docs`.
-
-Root deployment requires SALES_APP_MONGODB_URI, a complete URI for sales_app authenticated in admin with replicaSet=rs0 and bounded connection/server-selection timeouts. The deploy composition maps it to the application's MONGODB_URI. The Sales migration runner's MONGODB_URI is a separate administrator connection; never reuse it for this service.
-
-
-The root Compose deployment selects exactly one public-key source: `JWT_PUBLIC_KEY_FILE`
-points to `/run/secrets/sales_jwt_public_key`, mounted read-only from the required
-absolute `JWT_PUBLIC_KEY_PATH`. It sets inline `JWT_PUBLIC_KEY` empty even if another
-included service uses that input. The standalone binary still supports either source.
-`MONGODB_TIMEOUT` and `MONGODB_MAX_POOL_SIZE` retain their published 5s/10 defaults
-and operator overrides. The required real MongoDB CI suite uses the published secure
-Sales DB revision `e3ef534d1c205db78f74cfe70e53f7086ac4d1b5`; no migration guard or
-HTTP, architecture, race, unit or coverage check is removed.
-
-### Contract tests (Tier 3 of `11-quality/testing-strategy.md`)
-
-The `qa` policy (`00-governance/git-conventions.md`, `branching-policy.md`) requires "contract tests (Pact)" as a status
-check. The project's own testing strategy defines the contract tier as **OpenAPI conformance run by Schemathesis against the
-running service** on every PR. `deploy/ci/contract-tests.sh` implements exactly that for this service; it is **not**
-consumer-driven Pact and must not be reported as such.
-
-```bash
-bash deploy/ci/contract-tests.sh ../synkro-sales-db ../synkro-docs
-```
-
-It builds this checkout, starts it against a disposable MongoDB 7.0 carrying the pinned Sales DB migrations (same pin as the
-real-MongoDB launcher, read from `deploy/ci/mongo-integration.sh`), mints throwaway RS256 tokens (a SERVICE token with
-`sales:register` for `POST`, an ADMIN token for `GET`), and runs Schemathesis 4.33.2 (image pinned by digest) against the
-contract at the pinned `synkro-docs` revision (`DOCS_REF`) with the checks `status_code_conformance`,
-`response_schema_conformance`, `content_type_conformance` and `response_headers_conformance`. `/health` is checked directly
-because the contract documents it without the `/api/v1` prefix. Changing the contract means changing `DOCS_REF` (and the CI
-ref) in the same PR; the Python guard tests keep both equal. Reports are written to `.contract-results/` (ignored by Git).
-What it does not do: business rules (unit tests), database state (integration tests), consumer expectations (Pact).
-
-### Consumer-driven QA contracts
-
-Run `bash deploy/ci/contract-tests.sh /path/to/pinned-sales-db /path/to/pinned-docs` with Node 22 and Docker. Generated consumer artifacts,
-their published full commit revisions and UTF-8/LF SHA-256 hashes are recorded in
-`deploy/ci/pact/provenance.json`; verification rejects changed artifacts.
-Pact JS 17.1.4 is isolated from application dependencies. The owned Node runner
-installs system CA certificates required by Pact's HTTP verifier. A deliberately
-incompatible HTTP provider must receive the requests and fail verification before
-the real API/database verification can pass. State setup affects only the launcher's
-disposable database. Real verification failures propagate a nonzero exit and the
-launcher removes only its own labelled resources. No broker publication or hosted
-green result is implied. This gate complements OpenAPI conformance.
+<!-- Preserve previously published README section links. -->
+<a id="running-locally"></a>
+<a id="sales-http-endpoints-hu-ven-09"></a>
+<a id="sales-reports-hu-ven-10"></a>
+<a id="aggregation-design"></a>
+<a id="toolchain-and-vulnerability-scanning"></a>
+<a id="running-the-tests"></a>
+<a id="mongodb-persistence"></a>
+<a id="real-integration-tests"></a>
+<a id="contract-review-notes-for-hu-ven-09"></a>
+<a id="branching"></a>
+<a id="contract-tests-tier-3-of-11-qualitytesting-strategymd"></a>
+<a id="consumer-driven-qa-contracts"></a>
