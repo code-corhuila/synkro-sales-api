@@ -38,7 +38,7 @@ service names. Identity headers such as `X-User-Id` have no effect.
 
 | Operation | Required signed identity and permission | Result |
 |---|---|---|
-| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; same key returns original sale with `200` |
+| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; same key with equivalent input returns original sale with `200`; conflicting input is `422` |
 | `GET /api/v1/sales` | `ADMIN` or `SALESPERSON`, `sales:read` | Paginated active sales; salesperson ownership applies to both database reads and counts |
 | `GET /api/v1/sales/{id}` | `ADMIN` or `SALESPERSON`, `sales:read` | Active sale; another salesperson's sale returns `403`; missing/inactive returns `404` |
 
@@ -147,7 +147,7 @@ and the database health check with the same pooled client. The adapter never
 creates collections, indexes, roles or clients. Apply the Sales DB migrations before
 using it. One complete `InsertOne` stores the sale and idempotency key together;
 the migrated unique index is the concurrency boundary. Duplicate errors trigger a
-lookup by the same key; an unrelated duplicate `_id` remains an error. Disable
+lookup by the same key; only equivalent input returns the stored sale. Conflicting input is a generic 422 without stored values; an unrelated duplicate `_id` remains an error. See [the registration security contract](docs/sale-registration-security.md). Disable
 retryable writes on the shared client (`retryWrites=false`) for a single wire attempt;
 the adapter never changes the document/key or retries ambiguous insertion failures.
 

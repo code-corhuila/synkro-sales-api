@@ -1,0 +1,43 @@
+name: Sale authorship and idempotency
+
+on:
+  pull_request:
+    branches: [develop, qa, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-to-persisted-sale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: sales-api
+      - uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-workflow
+          ref: 9c604f5948f27db6c43b5fca721d455651a81008
+          path: workflow
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: code-corhuila/synkro-sales-db
+          ref: 70c2c5d603e0083566918144f5f0b63ad4108d7a
+          path: sales-db
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install cryptography==46.0.3
+      - name: Check real JWT authorship, Mongo persistence and conflicting replay
+        run: |
+          python sales-api/deploy/ci/security_chain.py --sales sales-api --workflow workflow --sales-db sales-db --idempotency | tee security-authorship-evidence.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-authorship-evidence
+          path: security-authorship-evidence.txt
+          if-no-files-found: error
