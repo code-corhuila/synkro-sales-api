@@ -106,9 +106,9 @@ docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$toke
   -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.26.9 bash -euo pipefail -c '
     getent hosts "$TEST_MONGO_HOST"
     go version
-    go test deploy/ci/verify-integration.go deploy/ci/verify-security-284.go deploy/ci/verify-security-285.go deploy/ci/verify-integration_test.go deploy/ci/http-evidence_test.go deploy/ci/verify-security-common_test.go deploy/ci/verify-security-284_test.go deploy/ci/verify-security-285_test.go
+    go test deploy/ci/verify-integration.go deploy/ci/verify-security-284.go deploy/ci/verify-security-285.go deploy/ci/verify-security-286.go deploy/ci/verify-integration_test.go deploy/ci/http-evidence_test.go deploy/ci/verify-security-common_test.go deploy/ci/verify-security-284_test.go deploy/ci/verify-security-285_test.go deploy/ci/verify-security-286_test.go
     go test -count=1 -race -coverprofile=.integration-results/coverage.out -json ./... > .integration-results/tests.json
   ' || { cat "$api_dir/.integration-results/tests.json"; exit 1; }
 # Evidence gate: a skipped or absent required scenario must fail the job.
 docker run --rm --name "$tester" --label "com.synkro.sales-api.integration=$token" "${offline_go[@]}" \
-  -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.26.9 go run deploy/ci/verify-integration.go deploy/ci/verify-security-284.go deploy/ci/verify-security-285.go
+  -v "$(host_path "$api_dir"):/workspace" -w /workspace golang:1.26.9 go run deploy/ci/verify-integration.go deploy/ci/verify-security-284.go deploy/ci/verify-security-285.go deploy/ci/verify-security-286.go
