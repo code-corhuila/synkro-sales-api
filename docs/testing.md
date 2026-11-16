@@ -28,6 +28,13 @@ go test ./...
 Two workflows run on pull requests to `develop`, `qa` and `main`, each checking out
 Sales, Workflow and Sales DB and invoking the cross-service harness from the repository root:
 
+For local execution, prepare the sibling checkouts at the revisions selected by
+the corresponding workflow. The authorship check pins Workflow to
+`5497cb31e2351dae8ed448101fbe882c023d99e1`; the audit check pins it to
+`0cf8cab2011434ed32d20a4f7f3092af5b1b09aa`. Both select Sales DB
+`e2168fb52f693892b8bbec4c60597b330abeb845`. Run the matching command below
+from this Sales API repository, with those checkouts in the named sibling paths.
+
 ```bash
 python deploy/ci/security_chain.py --sales . --workflow ../synkro-workflow --sales-db ../synkro-sales-db --idempotency
 python deploy/ci/security_chain.py --sales . --workflow ../synkro-workflow --sales-db ../synkro-sales-db --audit --idempotency

@@ -17,7 +17,7 @@ service names. Identity headers such as `X-User-Id` have no effect.
 
 | Operation | Required signed identity and permission | Result |
 |---|---|---|
-| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; same key returns original sale with `200` |
+| `POST /api/v1/sales` | `SERVICE`, `sub=synkro-workflow`, `sales:register` | `201` + Location; equivalent replay returns the original sale with `200`; conflicting key reuse returns `422` |
 | `GET /api/v1/sales` | `ADMIN` or `SALESPERSON`, `sales:read` | Paginated active sales; salesperson ownership applies to both database reads and counts |
 | `GET /api/v1/sales/{id}` | `ADMIN` or `SALESPERSON`, `sales:read` | Active sale; another salesperson's sale returns `403`; missing/inactive returns `404` |
 
