@@ -155,7 +155,7 @@ class ModuleCacheLauncher(unittest.TestCase):
 
     def test_sales_mc_02_prefetch_container_is_isolated_and_checksum_verified(self):
         call = self.execute().runs(FETCHER)[0]
-        self.assertIn('golang:1.26.9', call)
+        self.assertIn('golang:1.26.11', call)
         self.assertNotIn('--network', call)
         self.assertIn(f'{MODCACHE}:/gomodcache', option_values(call, '-v'))
         sources = [m for m in option_values(call, '-v') if m.endswith(':/workspace:ro')]
@@ -173,7 +173,7 @@ class ModuleCacheLauncher(unittest.TestCase):
         tests, verifier = self.execute().runs(TESTER)
         offline = {'GOMODCACHE=/gomodcache', 'GOPROXY=off', 'GOTOOLCHAIN=local', 'GOFLAGS=-mod=readonly'}
         for call in (tests, verifier):
-            self.assertIn('golang:1.26.9', call)
+            self.assertIn('golang:1.26.11', call)
             self.assertIn(f'{MODCACHE}:/gomodcache', option_values(call, '-v'))
             self.assertTrue(offline <= set(option_values(call, '-e')), call)
 

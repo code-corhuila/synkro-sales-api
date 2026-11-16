@@ -9,7 +9,7 @@ Run commands from the repository root unless a step explicitly changes directory
 
 ## Toolchain and vulnerability scanning
 
-The module and the container image build with Go 1.26.9 (`go.mod`,
+The module and the container image build with Go 1.26.11 (`go.mod`,
 `deploy/Dockerfile`, `deploy/ci/mongo-integration.sh` and the CI workflow use the
 same patch release). Dependencies that carried reachable advisories are at
 `golang.org/x/net` v0.60.0 and `golang.org/x/text` v0.42.0 (their transitive
